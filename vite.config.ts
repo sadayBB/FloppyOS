@@ -27,7 +27,11 @@ export default defineConfig({
           { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
-      workbox: { globPatterns: ['**/*.{js,css,html,woff,woff2,png,svg}'] },
+      workbox: {
+        globPatterns: ['**/*.{js,mjs,css,html,woff,woff2,png,svg}'],
+        maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
+        importScripts: ['push-sw.js'],
+      },
     }),
   ],
 });

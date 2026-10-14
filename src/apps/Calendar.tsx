@@ -4,6 +4,7 @@ import { addDays, addMonths, DAYS_SHORT, fmtDate, fmtDur, fromISO, fromMin, MONT
 import { EVENT_KIND, isOpen } from '../lib/labels';
 import { Btn, Field, Input, LazyInput, Modal, Select, SubjectSelect, Tabs } from '../os/ui';
 import { isCompact, useWM } from '../os/wm';
+import { ReminderPicker } from '../os/ReminderPicker';
 
 type View = 'day' | 'week' | 'month';
 const H0 = 7;
@@ -197,7 +198,7 @@ function EventModal({ ev, onClose }: { ev: Partial<CalEvent>; onClose: () => voi
   const set = (c: Partial<CalEvent>) => setE((x) => ({ ...x, ...c }));
   const save = async () => {
     if (!e.title?.trim() || !e.date) return;
-    const data = { title: e.title.trim(), kind: e.kind ?? 'otro', date: e.date, start: e.start || undefined, end: e.end || undefined, subjectId: e.subjectId, notes: e.notes };
+    const data = { title: e.title.trim(), kind: e.kind ?? 'otro', date: e.date, start: e.start || undefined, end: e.end || undefined, subjectId: e.subjectId, notes: e.notes, reminders: e.reminders };
     if (e.id) await patch('events', e.id, data);
     else await create('events', data);
     onClose();
@@ -224,6 +225,7 @@ function EventModal({ ev, onClose }: { ev: Partial<CalEvent>; onClose: () => voi
         <Field label="Fecha"><Input type="date" value={e.date ?? ''} onChange={(x) => set({ date: x.target.value })} /></Field>
         <Field label="Inicio (vacío = todo el día)"><Input type="time" value={e.start ?? ''} onChange={(x) => set({ start: x.target.value })} /></Field>
         <Field label="Fin"><Input type="time" value={e.end ?? ''} onChange={(x) => set({ end: x.target.value })} /></Field>
+        <Field label="Recordatorios" wide><ReminderPicker value={e.reminders} onChange={(reminders) => set({ reminders })} /></Field>
         <Field label="Notas" wide><LazyInput multiline value={e.notes ?? ''} onCommit={(v) => set({ notes: v })} /></Field>
       </div>
     </Modal>

@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { create, patch, remove, useRows, type ID, type Subject, type Topic, type TopicStatus } from '../db';
 import { TOPIC_STATUS, topicRank, topicStatus } from '../lib/labels';
 import { Btn, Empty, LazyInput, Modal } from '../os/ui';
 import { useWM } from '../os/wm';
+import { pdfToText } from '../lib/pdf';
+import { addReference } from './Bibliography';
 
 interface Draft {
   title: string;
@@ -152,6 +154,27 @@ function ImportModal({ subject, onClose }: { subject: Subject; onClose: () => vo
   const [text, setText] = useState('');
   const [drafts, setDrafts] = useState<Draft[] | null>(null);
   const [saveBiblio, setSaveBiblio] = useState(true);
+  const pdfInput = useRef<HTMLInputElement>(null);
+  const [pdfBusy, setPdfBusy] = useState<string | null>(null);
+  const [pdfWarn, setPdfWarn] = useState<string | null>(null);
+
+  const loadFile = async (f: File) => {
+    setPdfWarn(null);
+    if (f.size > 25 * 1024 * 1024) return setPdfWarn('El archivo pesa más de 25 MB.');
+    if (!/pdf$/i.test(f.type) && !/\.pdf$/i.test(f.name)) return setText(await f.text());
+    setPdfBusy('Leyendo PDF…');
+    try {
+      const r = await pdfToText(f, (p, n) => setPdfBusy(`Leyendo página ${p} de ${n}…`));
+      if (r.scanned) setPdfWarn('Este PDF parece escaneado (son imágenes, no texto), así que no puedo leerlo. Copia el temario a mano o usa un PDF con texto seleccionable.');
+      else {
+        if (r.emptyPages) setPdfWarn(`${r.emptyPages} de ${r.pages} páginas no tenían texto legible (¿escaneadas?). Revisa que no falte nada.`);
+        setText(r.text.trim());
+      }
+    } catch (e) {
+      setPdfWarn(`No pude abrir el PDF: ${(e as Error).message}`);
+    }
+    setPdfBusy(null);
+  };
   const upd = (i: number, c: Partial<Draft>) => setDrafts((d) => d!.map((x, j) => (j === i ? { ...x, ...c } : x)));
 
   const confirmImport = async () => {
@@ -165,8 +188,7 @@ function ImportModal({ subject, onClose }: { subject: Subject; onClose: () => vo
       stack.push(t.id);
     }
     const refs = drafts.filter((x) => x.biblio && !x.include);
-    if (saveBiblio && refs.length)
-      await create('notes', { title: `Bibliografía — ${subject.name}`, body: `Referencias detectadas al importar el temario (sin verificar):\n\n${refs.map((r) => `- ${r.title}`).join('\n')}`, subjectId: subject.id, tags: ['bibliografía'] });
+    if (saveBiblio) for (const r of refs) await addReference(subject.id, r.title, 'temario');
     onClose();
   };
 
@@ -188,7 +210,13 @@ function ImportModal({ subject, onClose }: { subject: Subject; onClose: () => vo
     >
       {!drafts ? (
         <>
-          <p className="hint">Pega aquí el temario (copiado del PDF o del programa). Reconozco «Unidad 1», «1.2 Tema», viñetas y sangrías. Antes de guardar podrás revisar todo.</p>
+          <p className="hint">Sube el PDF del programa o pega el texto. Reconozco «Unidad 1», «1.2 Tema», viñetas y sangrías. Antes de guardar podrás revisar todo.</p>
+          <div className="toolbar">
+            <Btn small onClick={() => pdfInput.current?.click()} disabled={!!pdfBusy}>📄 Subir PDF…</Btn>
+            {pdfBusy && <span className="hint">{pdfBusy}</span>}
+            <input ref={pdfInput} type="file" accept="application/pdf,.pdf,.txt,.md" hidden onChange={(e) => e.target.files?.[0] && void loadFile(e.target.files[0])} />
+          </div>
+          {pdfWarn && <div className="warn">⚠ {pdfWarn}</div>}
           <textarea className="input mono" rows={14} value={text} onChange={(e) => setText(e.target.value)} placeholder={'Unidad 1. Introducción a redes\n1.1 Modelo OSI\n1.2 TCP/IP\nUnidad 2. Capa de enlace\n2.1 Ethernet\n2.2 VLAN\n\nBibliografía\nTanenbaum, A. (2011). Redes de computadoras, 5ª ed. Pearson.'} />
         </>
       ) : (
@@ -206,7 +234,7 @@ function ImportModal({ subject, onClose }: { subject: Subject; onClose: () => vo
             ))}
           </ul>
           {drafts.some((d) => d.biblio) && (
-            <label className="check"><input type="checkbox" checked={saveBiblio} onChange={(e) => setSaveBiblio(e.target.checked)} /> Guardar las referencias detectadas (no incluidas) en un apunte «Bibliografía», marcadas como sin verificar</label>
+            <label className="check"><input type="checkbox" checked={saveBiblio} onChange={(e) => setSaveBiblio(e.target.checked)} /> Agregar las referencias detectadas (no incluidas como temas) a la Bibliografía de la materia, marcadas como «sin verificar»</label>
           )}
         </>
       )}

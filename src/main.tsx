@@ -6,6 +6,7 @@ import { registerSW } from 'virtual:pwa-register';
 import App from './App';
 import { db } from './db';
 import './styles.css';
+import './styles-modules.css';
 
 registerSW({ immediate: true });
 // Ask the browser not to evict our IndexedDB under storage pressure.

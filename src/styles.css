@@ -727,8 +727,6 @@ input[type='checkbox'] { width: 16px; height: 16px; accent-color: var(--title-a)
 .assistant { position: fixed; right: 14px; bottom: 52px; z-index: 8000; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; pointer-events: none; }
 .bubble { background: var(--warn-bg); color: var(--ink); }
 .bubble-name { font-size: 12px; font-weight: 600; color: var(--accent); margin-bottom: 2px; }
-.assistant.rover .assistant-sprite { animation: wag 1.6s steps(2) infinite; }
-@keyframes wag { 50% { transform: rotate(-3deg) translateY(-2px); } }
 
 /* Tray sync indicator */
 .tray-item[class*='sync-'] { font-size: 16px; min-width: 22px; justify-content: center; }
@@ -805,3 +803,15 @@ input[type='checkbox'] { width: 16px; height: 16px; accent-color: var(--title-a)
 [data-theme='noche'] .ev, [data-theme='noche'] .ev-chip { color: #fff; }
 .status-select, .kind-select { color: #2e2848; }
 .kind-select { background: #fff; }
+.steps { padding-left: 20px; }
+.steps li { margin-bottom: 6px; }
+code { background: var(--field); padding: 0 4px; box-shadow: var(--in); font-family: inherit; font-size: 13px; word-break: break-all; }
+.cat-editor { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-start; padding: 10px; background: var(--paper); box-shadow: var(--in); }
+.cat-preview { padding: 8px; background: radial-gradient(var(--note-line) 1px, transparent 1.2px) 0 0 / 10px 10px, var(--field); box-shadow: var(--in); }
+.cat-fields { display: flex; flex-direction: column; gap: 10px; flex: 1; min-width: 220px; }
+.fur-swatches { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.fur { width: 30px; height: 30px; border: 0; box-shadow: var(--out); cursor: pointer; padding: 0; display: grid; place-items: center; position: relative; }
+.fur.on { outline: 2px solid var(--accent); outline-offset: 1px; box-shadow: var(--in); }
+.fur.eye { border-radius: 50%; }
+.fur.custom { background: var(--face); font-size: 15px; }
+.fur.custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }

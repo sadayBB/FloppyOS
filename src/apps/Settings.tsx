@@ -4,12 +4,15 @@ import { DATA_TABLES, db, useLocal, useSetting } from '../db';
 import { downloadJSON, exportAll, mergeBackup } from '../lib/backup';
 import { today } from '../lib/dates';
 import { configure, fullResync, getConfig, signIn, signOut, signUp, syncNow, useSync } from '../lib/sync';
+import { DEFAULT_REMINDERS, disablePush, enablePush, testNotification, type ReminderDefaults } from '../lib/reminders';
+import { ReminderPicker } from '../os/ReminderPicker';
 import { MAX_UPLOAD, PRESETS, type Fit, type Wallpaper } from '../lib/wallpaper';
 import type { AssistantId } from '../os/Assistant';
 import { Pixel } from '../pixel/Pixel';
+import { CatSprite, EYES, FURS, useCat, type CatLook } from '../pixel/cat';
 import { Btn, Field, Input, Select, Tabs } from '../os/ui';
 
-type Tab = 'general' | 'look' | 'sync' | 'backup' | 'about';
+type Tab = 'general' | 'look' | 'sync' | 'alerts' | 'backup' | 'about';
 
 export default function Settings({ tab: initTab }: { tab?: Tab }) {
   const [tab, setTab] = useState<Tab>(initTab ?? 'look');
@@ -21,6 +24,7 @@ export default function Settings({ tab: initTab }: { tab?: Tab }) {
         tabs={[
           { id: 'look', label: 'Apariencia' },
           { id: 'general', label: 'Estudio' },
+          { id: 'alerts', label: 'Avisos' },
           { id: 'sync', label: 'Sincronización' },
           { id: 'backup', label: 'Respaldo' },
           { id: 'about', label: 'Acerca de' },
@@ -30,6 +34,7 @@ export default function Settings({ tab: initTab }: { tab?: Tab }) {
         {tab === 'look' && <Look />}
         {tab === 'general' && <General />}
         {tab === 'sync' && <Sync />}
+        {tab === 'alerts' && <Alerts />}
         {tab === 'backup' && <Backup />}
         {tab === 'about' && <About />}
       </div>
@@ -49,7 +54,8 @@ function Look() {
   const [theme, setTheme] = useSetting<ThemeId>('theme', 'lavanda');
   const [colorTitles, setColorTitles] = useSetting('colorTitles', true);
   const [dots, setDots] = useSetting('desktopDots', true);
-  const [assistant, setAssistant] = useSetting<AssistantId | 'none'>('assistant', 'clippy');
+  const [assistant, setAssistant] = useSetting<AssistantId | 'rover' | 'none'>('assistant', 'cat');
+  const cat = useCat();
   const [wp, setWp] = useLocal<Wallpaper>('wallpaper', { kind: 'theme' });
   const [err, setErr] = useState<string | null>(null);
   const file = useRef<HTMLInputElement>(null);
@@ -113,12 +119,50 @@ function Look() {
 
       <h3>Asistente</h3>
       <div className="assistant-pick">
-        {(['clippy', 'rover', 'none'] as const).map((a) => (
-          <button key={a} className={`theme-card ${assistant === a ? 'on' : ''}`} onClick={() => setAssistant(a)}>
-            {a === 'none' ? <span className="none-face">zZz</span> : <Pixel sprite={a} scale={2} />}
-            {a === 'clippy' ? 'Clippy' : a === 'rover' ? 'Rover' : 'Ninguno'}
+        {(['cat', 'clippy', 'none'] as const).map((a) => (
+          <button key={a} className={`theme-card ${(assistant === 'rover' ? 'cat' : assistant) === a ? 'on' : ''}`} onClick={() => setAssistant(a)}>
+            {a === 'none' ? <span className="none-face">zZz</span> : a === 'cat' ? <CatSprite scale={2} palette={cat.palette} /> : <Pixel sprite="clippy" scale={2} />}
+            {a === 'cat' ? cat.name || 'Michi' : a === 'clippy' ? 'Clippy' : 'Ninguno'}
           </button>
         ))}
+      </div>
+      {(assistant === 'cat' || assistant === 'rover') && <CatEditor />}
+    </div>
+  );
+}
+
+function CatEditor() {
+  const { look, setLook, name, setName, palette } = useCat();
+  const set = (c: Partial<CatLook>) => setLook({ ...look, ...c });
+  const custom = look.fur.startsWith('#');
+  return (
+    <div className="cat-editor">
+      <div className="cat-preview">
+        <CatSprite scale={5} palette={palette} />
+      </div>
+      <div className="cat-fields">
+        <Field label="Nombre"><Input value={name} maxLength={20} onChange={(e) => setName(e.target.value)} /></Field>
+        <div className="field">
+          <span>Pelaje</span>
+          <div className="fur-swatches">
+            {FURS.map((f) => (
+              <button key={f.id} className={`fur ${look.fur === f.id ? 'on' : ''}`} title={f.name} aria-label={f.name} onClick={() => set({ fur: f.id })} style={{ background: `linear-gradient(135deg, ${f.c[0]} 0 35%, ${f.c[1]} 35% 70%, ${f.c[2]} 70%)` }} />
+            ))}
+            <label className={`fur custom ${custom ? 'on' : ''}`} title="Elegir cualquier color">
+              <input type="color" value={custom ? look.fur : '#9b83dd'} onChange={(e) => set({ fur: e.target.value })} aria-label="Color personalizado" />
+              🎨
+            </label>
+          </div>
+        </div>
+        <div className="field">
+          <span>Ojos</span>
+          <div className="fur-swatches">
+            {EYES.map((e) => (
+              <button key={e.id} className={`fur eye ${look.eyes === e.id ? 'on' : ''}`} title={e.name} aria-label={`Ojos ${e.name}`} onClick={() => set({ eyes: e.id })} style={{ background: e.c }} />
+            ))}
+          </div>
+        </div>
+        <label className="check"><input type="checkbox" checked={look.pattern === 'atigrado'} onChange={(e) => set({ pattern: e.target.checked ? 'atigrado' : 'liso' })} /> Rayitas de atigrado</label>
       </div>
     </div>
   );
@@ -194,10 +238,13 @@ function Sync() {
       {sync.phase === 'unconfigured' || !cfg ? (
         <>
           <h3>1. Conectar con Supabase</h3>
-          <p className="hint">Copia estos dos datos de tu proyecto en Supabase → Project Settings → API. La clave «anon» es pública por diseño: tus datos están protegidos por la seguridad por filas.</p>
+          <ol className="steps">
+            <li><b>Dirección del proyecto:</b> copia la dirección de tu navegador mientras estás en el panel de tu proyecto (algo como <code>supabase.com/dashboard/project/abcdxyz…</code>) y pégala tal cual. También sirve la «Project URL» (botón <b>Connect</b> arriba en el panel) o solo el ID del proyecto.</li>
+            <li><b>Clave:</b> en <b>Project Settings → API Keys</b>, copia la <b>Publishable key</b> (empieza con <code>sb_publishable_</code>). ¡Nunca la «Secret key»!</li>
+          </ol>
           <div className="form">
-            <Field label="Project URL" wide><Input value={url} onChange={(e) => setUrl(e.target.value.trim())} placeholder="https://xxxx.supabase.co" /></Field>
-            <Field label="anon public key" wide><Input value={key} onChange={(e) => setKey(e.target.value.trim())} placeholder="eyJhbGciOi…" /></Field>
+            <Field label="Dirección o ID del proyecto" wide><Input value={url} onChange={(e) => setUrl(e.target.value.trim())} placeholder="supabase.com/dashboard/project/abcd…  ó  https://abcd.supabase.co" /></Field>
+            <Field label="Publishable key" wide><Input value={key} onChange={(e) => setKey(e.target.value.trim())} placeholder="sb_publishable_…" /></Field>
           </div>
           <Btn primary disabled={!url || !key || busy} onClick={() => run(() => configure({ url, anonKey: key }))}>Guardar conexión</Btn>
         </>
@@ -224,6 +271,58 @@ function Sync() {
           </div>
           <p className="hint">Se sincroniza sola: al hacer cambios, al volver a la app, al recuperar internet y cada 2 minutos. Sin internet todo sigue funcionando y se guarda en este dispositivo.</p>
         </>
+      )}
+      {msg && <p className="notice">{msg}</p>}
+    </div>
+  );
+}
+
+function Alerts() {
+  const [d, setD] = useSetting<ReminderDefaults>('reminderDefaults', DEFAULT_REMINDERS);
+  const [push, setPush] = useLocal('pushEnabled', false);
+  const sync = useSync();
+  const [msg, setMsg] = useState<string | null>(null);
+  const [perm, setPerm] = useState(typeof Notification !== 'undefined' ? Notification.permission : 'denied');
+  const run = async (fn: () => Promise<unknown>) => {
+    setMsg(null);
+    try {
+      const r = await fn();
+      if (typeof r === 'string') setMsg(r);
+    } catch (e) {
+      setMsg(`⚠ ${(e as Error).message}`);
+    }
+    setPerm(typeof Notification !== 'undefined' ? Notification.permission : 'denied');
+  };
+  return (
+    <div className="prose wide-prose">
+      <h3>Avisos predeterminados</h3>
+      <p className="hint">Se usan cuando una tarea o evento no tiene avisos propios. Cada uno se puede cambiar en su ficha.</p>
+      <div className="form">
+        <Field label="Hora para lo que no tiene hora"><Input type="time" value={d.dayStart} onChange={(e) => setD({ ...d, dayStart: e.target.value || '08:00' })} /></Field>
+        <Field label="Tareas con fecha" wide><ReminderPicker value={d.task} onChange={(v) => setD({ ...d, task: v ?? DEFAULT_REMINDERS.task })} /></Field>
+        <Field label="Exámenes y entregas" wide><ReminderPicker value={d.exam} onChange={(v) => setD({ ...d, exam: v ?? DEFAULT_REMINDERS.exam })} /></Field>
+        <Field label="Otros eventos" wide><ReminderPicker value={d.event} onChange={(v) => setD({ ...d, event: v ?? DEFAULT_REMINDERS.event })} /></Field>
+      </div>
+
+      <h3>Con la app abierta</h3>
+      <p>Notificaciones: <b>{perm === 'granted' ? 'permitidas ✓' : perm === 'denied' ? 'bloqueadas (cámbialo en la configuración del sitio)' : 'sin decidir'}</b></p>
+      <div className="row-btns">
+        {perm !== 'granted' && <Btn primary onClick={() => run(() => Notification.requestPermission())}>Permitir notificaciones</Btn>}
+        <Btn onClick={() => run(testNotification)} disabled={perm !== 'granted'}>Probar aviso</Btn>
+      </div>
+      <p className="hint">Mientras FloppyOS esté abierta (aunque sea en segundo plano y sin internet), te avisa a tiempo.</p>
+
+      <h3>Con la app cerrada</h3>
+      <p className="hint">Necesita la sincronización con Supabase y una configuración única en tu proyecto (ver «Recordatorios push» en el README). Actívalo en cada dispositivo donde quieras recibirlos.</p>
+      {sync.phase === 'unconfigured' || sync.phase === 'signed_out' ? (
+        <p className="notice">Primero conecta e inicia sesión en la pestaña Sincronización.</p>
+      ) : push ? (
+        <div className="row-btns">
+          <span className="notice">✓ Activado en este dispositivo</span>
+          <Btn onClick={() => run(async () => { await disablePush(); await setPush(false); return 'Desactivado en este dispositivo.'; })}>Desactivar</Btn>
+        </div>
+      ) : (
+        <Btn primary onClick={() => run(async () => { const m = await enablePush(); await setPush(true); return m; })}>Activar avisos con la app cerrada</Btn>
       )}
       {msg && <p className="notice">{msg}</p>}
     </div>

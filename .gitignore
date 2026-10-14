@@ -3,3 +3,7 @@ dist
 dev-dist
 .env
 .env.local
+
+# llaves privadas locales
+supabase/.vapid-keys.local.txt
+*.local.txt

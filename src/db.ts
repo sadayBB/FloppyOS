@@ -30,6 +30,35 @@ export interface Subject extends Base {
   description?: string;
   color: string;
   icon?: string; // sticker id
+  grading?: GradingScheme;
+}
+
+/** One graded activity. `weight` is a % of its unit (or of the ordinary). Scores use 0..max (default 10). */
+export interface GradeItem {
+  id: ID;
+  name: string;
+  weight: number;
+  score?: number;
+  max?: number;
+  date?: string;
+  notes?: string;
+}
+export interface GradeUnit {
+  id: ID;
+  name: string;
+  /** Optional weight of the unit inside the units average; equal weights when all are empty. */
+  weight?: number;
+  items: GradeItem[];
+}
+export interface GradingScheme {
+  scale: number; // 10
+  pass: number; // minimum passing grade
+  unitsWeight: number; // % of the final from the units average (UNISTMO: 50)
+  ordinaryWeight: number; // % of the final from the ordinary exam (UNISTMO: 50)
+  units: GradeUnit[];
+  ordinary: GradeItem[];
+  ordinaryNote?: string;
+  rounding?: 'ninguno' | 'decimal' | 'entero';
 }
 
 export type SlotKind = 'clase' | 'laboratorio' | 'trabajo' | 'traslado' | 'descanso' | 'otro';
@@ -64,7 +93,18 @@ export interface Task extends Base {
   subtasks: Subtask[];
   completedAt?: number;
   dependsOn?: ID;
+  projectId?: ID;
+  assignee?: string;
+  recurrence?: Recurrence;
+  nextSpawned?: boolean;
+  /** Minutes before the due date/time to remind (e.g. [1440, 60]). */
+  reminders?: number[];
   sourceInboxId?: ID;
+}
+
+export interface Recurrence {
+  freq: 'daily' | 'weekly' | 'monthly';
+  interval: number;
 }
 
 export type InboxKind = 'tarea' | 'recordatorio' | 'tema' | 'palabra' | 'duda' | 'idea' | 'recurso' | 'nota';
@@ -109,6 +149,7 @@ export interface CalEvent extends Base {
   end?: string;
   subjectId?: ID;
   notes?: string;
+  reminders?: number[];
 }
 
 export interface StudySession extends Base {
@@ -122,6 +163,78 @@ export interface StudySession extends Base {
   breakMin: number;
   outcome?: string;
   next?: string;
+}
+
+export type RefKind = 'obligatoria' | 'complementaria' | 'recomendada';
+export type RefStatus = 'por_conseguir' | 'disponible' | 'leyendo' | 'terminada';
+export type RefVerify = 'no_verificada' | 'probable' | 'confirmada' | 'no_encontrada';
+export interface Reference extends Base {
+  subjectId?: ID;
+  topicIds: ID[];
+  title: string;
+  authors?: string;
+  year?: string;
+  edition?: string;
+  publisher?: string;
+  isbn?: string;
+  doi?: string;
+  url?: string;
+  kind: RefKind;
+  status: RefStatus;
+  verify: RefVerify;
+  /** Where the data came from, so every field can be traced (RF-18). */
+  source: { origin: 'manual' | 'temario' | 'openlibrary' | 'crossref' | 'ia'; detail?: string; checkedAt?: number };
+  links?: { label: string; url: string }[];
+  notes?: string;
+  raw?: string;
+}
+
+export interface Milestone {
+  id: ID;
+  title: string;
+  date?: string;
+  done: boolean;
+}
+export interface CheckItem {
+  id: ID;
+  text: string;
+  done: boolean;
+  evidence?: string;
+}
+export interface ProjectLog {
+  id: ID;
+  date: string;
+  kind: 'avance' | 'reunion' | 'decision' | 'incidencia';
+  text: string;
+  participants?: string;
+}
+export interface Project extends Base {
+  title: string;
+  subjectId?: ID;
+  description?: string;
+  objective?: string;
+  members: string[];
+  start?: string;
+  due?: string;
+  status: 'activo' | 'pausado' | 'entregado' | 'cancelado';
+  milestones: Milestone[];
+  checklist: CheckItem[];
+  links: { id: ID; label: string; url: string }[];
+  log: ProjectLog[];
+}
+
+export interface Flashcard extends Base {
+  subjectId?: ID;
+  topicId?: ID;
+  front: string;
+  back: string;
+  due: string;
+  interval: number; // days
+  ease: number;
+  reps: number;
+  lapses: number;
+  lastReviewed?: number;
+  source?: string;
 }
 
 export interface Setting {
@@ -148,6 +261,9 @@ class FloppyDB extends Dexie {
   sessions!: Table<StudySession, ID>;
   settings!: Table<Setting, string>;
   local!: Table<LocalRow, string>;
+  refs!: Table<Reference, ID>;
+  projects!: Table<Project, ID>;
+  cards!: Table<Flashcard, ID>;
 
   constructor() {
     super('floppyos');
@@ -164,6 +280,12 @@ class FloppyDB extends Dexie {
       settings: 'key',
     });
     this.version(2).stores({ local: 'key' });
+    this.version(3).stores({
+      tasks: 'id, subjectId, projectId, status, due, updatedAt',
+      refs: 'id, subjectId, updatedAt',
+      projects: 'id, subjectId, updatedAt',
+      cards: 'id, subjectId, due, updatedAt',
+    });
   }
 }
 
@@ -178,7 +300,7 @@ export const onLocalChange = (fn: () => void) => {
 const changed = () => changeListeners.forEach((fn) => fn());
 
 export const DATA_TABLES = [
-  'semesters', 'subjects', 'slots', 'tasks', 'inbox', 'topics', 'notes', 'events', 'sessions',
+  'semesters', 'subjects', 'slots', 'tasks', 'inbox', 'topics', 'notes', 'events', 'sessions', 'refs', 'projects', 'cards',
 ] as const;
 export type TableName = (typeof DATA_TABLES)[number];
 

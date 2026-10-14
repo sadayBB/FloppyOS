@@ -4,6 +4,7 @@ import { APP_COMPONENTS } from './apps/registry';
 import { useSetting } from './db';
 import { init as initSync } from './lib/sync';
 import { useWallpaperCss } from './lib/wallpaper';
+import { useReminderEngine } from './lib/reminders';
 import { Pixel } from './pixel/Pixel';
 import { Assistant, type AssistantId } from './os/Assistant';
 import { DesktopStickers } from './os/DesktopStickers';
@@ -16,10 +17,11 @@ export type ThemeId = 'lavanda' | 'rosa' | 'noche' | 'teal98' | 'clasico';
 function Desktop() {
   const wm = useWM();
   const [selected, setSelected] = useState<AppId | null>(null);
-  const [assistant, setAssistant] = useSetting<AssistantId | 'none'>('assistant', 'clippy');
+  const [assistant, setAssistant] = useSetting<AssistantId | 'rover' | 'none'>('assistant', 'cat');
   const [theme] = useSetting<ThemeId>('theme', 'lavanda');
   const [dots] = useSetting('desktopDots', true);
   const wallpaper = useWallpaperCss();
+  useReminderEngine();
   const [, force] = useState(0);
 
   useEffect(() => {
@@ -72,7 +74,7 @@ function Desktop() {
       })}
 
       {assistant !== 'none' && <Assistant who={assistant} onHide={() => setAssistant('none')} />}
-      <Taskbar assistantHidden={assistant === 'none'} onShowAssistant={() => setAssistant('clippy')} />
+      <Taskbar assistantHidden={assistant === 'none'} onShowAssistant={() => setAssistant('cat')} />
     </div>
   );
 }

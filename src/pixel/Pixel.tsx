@@ -5,10 +5,12 @@ interface Props {
   sprite: SpriteName | string[];
   scale?: number;
   className?: string;
+  /** Extra or overriding colours, e.g. the cat's fur slots. */
+  palette?: Record<string, string>;
 }
 
 /** Renders a character-grid sprite as a crisp SVG, merging horizontal runs into single rects. */
-export function Pixel({ sprite, scale = 2, className }: Props) {
+export function Pixel({ sprite, scale = 2, className, palette }: Props) {
   const rows = typeof sprite === 'string' ? SPRITES[sprite] : sprite;
   const { w, h, rects } = useMemo(() => {
     const w = Math.max(...rows.map((r) => r.length));
@@ -19,12 +21,13 @@ export function Pixel({ sprite, scale = 2, className }: Props) {
         const ch = row[x];
         let len = 1;
         while (row[x + len] === ch) len++;
-        if (ch !== '.' && PAL[ch]) rects.push({ x, y, len, c: PAL[ch] });
+        const c = palette?.[ch] ?? PAL[ch];
+        if (ch !== '.' && c) rects.push({ x, y, len, c });
         x += len;
       }
     });
     return { w, h: rows.length, rects };
-  }, [rows]);
+  }, [rows, palette]);
 
   return (
     <svg

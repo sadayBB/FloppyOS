@@ -75,9 +75,45 @@ interface Cursor {
 }
 const cursor = (): Cursor => ls.get<Cursor>(CURSOR_KEY, { lastPush: 0, lastRev: 0 });
 
+/**
+ * Accepts the project URL, the bare project ID, or a dashboard link
+ * (supabase.com/dashboard/project/<id>/…) and returns https://<id>.supabase.co.
+ */
+export function normalizeUrl(input: string): string | null {
+  const v = input.trim().replace(/\/+$/, '');
+  const dash = v.match(/supabase\.com\/dashboard\/project\/([a-z0-9]{10,})/i);
+  if (dash) return `https://${dash[1].toLowerCase()}.supabase.co`;
+  if (/^https?:\/\/[^/]+$/i.test(v)) return v.replace(/^http:/i, 'https:');
+  if (/^[a-z0-9]{10,}$/i.test(v)) return `https://${v.toLowerCase()}.supabase.co`;
+  return null;
+}
+
+/** Rejects secret/service keys: they must never live in a browser. */
+export function checkKey(key: string): string | null {
+  const k = key.trim();
+  if (k.startsWith('sb_secret_')) return 'Esa es la clave SECRETA. Usa la «Publishable key» (empieza con sb_publishable_).';
+  if (k.startsWith('eyJ')) {
+    try {
+      const payload = JSON.parse(atob(k.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      if (payload.role === 'service_role') return 'Esa es la clave service_role (secreta). Usa la clave «anon» o la «Publishable key».';
+    } catch {
+      return 'La clave no parece válida.';
+    }
+    return null;
+  }
+  if (k.startsWith('sb_publishable_')) return null;
+  return 'La clave debería empezar con sb_publishable_ (o eyJ… si es la clave anon antigua).';
+}
+
 export async function configure(cfg: SyncConfig | null) {
-  if (cfg) ls.set(CFG_KEY, cfg);
-  else localStorage.removeItem(CFG_KEY);
+  if (cfg) {
+    const url = normalizeUrl(cfg.url);
+    if (!url) throw new Error('No reconozco la dirección del proyecto. Pega la Project URL, el ID del proyecto o el enlace del panel.');
+    const bad = checkKey(cfg.anonKey);
+    if (bad) throw new Error(bad);
+    cfg = { url, anonKey: cfg.anonKey.trim() };
+    ls.set(CFG_KEY, cfg);
+  } else localStorage.removeItem(CFG_KEY);
   client = null;
   session = null;
   await init();
@@ -194,3 +230,6 @@ window.addEventListener('online', () => void syncNow());
 window.addEventListener('offline', () => state.phase !== 'unconfigured' && state.phase !== 'signed_out' && set({ phase: 'offline' }));
 document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && void syncNow());
 setInterval(() => void syncNow(), 120000);
+
+/** For features that talk to Supabase directly (push reminders). */
+export const getClient = () => (session ? client : null);

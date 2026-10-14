@@ -10,8 +10,11 @@ import { STICKERS, stickerById } from '../pixel/stickers';
 import { useUnlocked } from '../lib/stickers';
 import { Syllabus } from './Syllabus';
 import { toggleDone } from './Tasks';
+import { SubjectIcon } from './SubjectIcon';
+import { GradesTab } from './Grades';
+import { Bibliography } from './Bibliography';
 
-type Tab = 'info' | 'horario' | 'temario' | 'tareas' | 'clases' | 'notas';
+type Tab = 'info' | 'horario' | 'temario' | 'tareas' | 'clases' | 'notas' | 'calif' | 'biblio';
 
 export default function Subjects({ subjectId, tab: initTab }: { subjectId?: ID; tab?: Tab }) {
   const { semesters, active, setActiveId } = useActiveSemester();
@@ -75,12 +78,15 @@ export default function Subjects({ subjectId, tab: initTab }: { subjectId?: ID; 
               <SubjectIcon s={sel} big />
               <h2 className="subject-title">{sel.name}</h2>
               {sel.code && <Chip>{sel.code}</Chip>}
+              {sel.professor ? <span className="prof">👩‍🏫 {sel.professor}</span> : <button className="link muted" onClick={() => setTab('info')}>+ profesor/a</button>}
             </div>
             <Tabs<Tab>
               value={tab}
               onChange={setTab}
               tabs={[
                 { id: 'temario', label: 'Temario' },
+                { id: 'calif', label: 'Calificación' },
+                { id: 'biblio', label: 'Bibliografía' },
                 { id: 'clases', label: 'Clase' },
                 { id: 'tareas', label: 'Tareas' },
                 { id: 'horario', label: 'Horario' },
@@ -95,6 +101,8 @@ export default function Subjects({ subjectId, tab: initTab }: { subjectId?: ID; 
               {tab === 'tareas' && <SubjectTasks s={sel} />}
               {tab === 'clases' && <ClassLog s={sel} />}
               {tab === 'notas' && <SubjectNotes s={sel} />}
+              {tab === 'calif' && <GradesTab s={sel} />}
+              {tab === 'biblio' && <Bibliography subject={sel} />}
             </div>
           </>
         )}
@@ -274,12 +282,6 @@ function SubjectNotes({ s }: { s: Subject }) {
       <Btn onClick={async () => { const n = await create('notes', { title: '', body: '', subjectId: s.id, tags: [] }); wm.open('notes', { noteId: n.id }); }}>+ Apunte</Btn>
     </div>
   );
-}
-
-export function SubjectIcon({ s, big }: { s: Subject; big?: boolean }) {
-  const def = s.icon ? stickerById(s.icon) : undefined;
-  if (!def) return <Dot color={s.color} size={big ? 14 : 10} />;
-  return <span className="subject-icon" style={{ background: s.color }}><Pixel sprite={def.rows} scale={big ? 2 : 1} /></span>;
 }
 
 function StickerPicker({ value, onChange }: { value?: string; onChange: (id: string | undefined) => void }) {

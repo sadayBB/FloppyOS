@@ -5,12 +5,13 @@ import { KIND_COLOR, KIND_LABEL, parseCapture } from '../lib/parse';
 import { PRIORITY } from '../lib/labels';
 import { Btn, Chip, Empty, Select, SubjectSelect, Tabs } from '../os/ui';
 import { useWM } from '../os/wm';
+import { newCard } from './Cards';
 
 type Filter = 'pending' | 'duda' | 'palabra' | 'all' | 'done';
 const KINDS = Object.keys(KIND_LABEL) as InboxKind[];
 
 /** Converts an inbox item into an organised record, keeping the original text and a back-link. */
-export async function convert(item: InboxItem, to: 'task' | 'note' | 'topic' | 'event') {
+export async function convert(item: InboxItem, to: 'task' | 'note' | 'topic' | 'event' | 'card') {
   let ref: InboxItem['convertedTo'];
   if (to === 'task') {
     const t = await create('tasks', { title: item.text, subjectId: item.subjectId, status: item.due ? 'programada' : 'pendiente', priority: item.priority ?? 2, due: item.due, dueTime: item.dueTime, estimateMin: item.estimateMin, tags: item.tags, subtasks: [], sourceInboxId: item.id });
@@ -22,6 +23,9 @@ export async function convert(item: InboxItem, to: 'task' | 'note' | 'topic' | '
     if (!item.subjectId) throw new Error('Asigna una materia antes de convertirlo en tema.');
     const t = await create('topics', { subjectId: item.subjectId, title: item.text, order: Date.now(), status: item.kind === 'palabra' ? 'introducido' : 'no_iniciado' });
     ref = { table: 'topics', id: t.id };
+  } else if (to === 'card') {
+    const c = await newCard(item.kind === 'palabra' ? `¿Qué es ${item.text}?` : item.text, '', item.subjectId, undefined, 'Bandeja');
+    ref = { table: 'cards', id: c.id };
   } else {
     if (!item.due) throw new Error('Ponle una fecha antes de convertirlo en evento.');
     const e = await create('events', { title: item.text, kind: 'otro', date: item.due, start: item.dueTime, subjectId: item.subjectId });
@@ -168,8 +172,8 @@ export default function Inbox() {
                     {i.estimateMin && <Chip>⏱ {fmtDur(i.estimateMin)}</Chip>}
                     {i.tags.map((t) => <Chip key={t}>#{t}</Chip>)}
                     {i.convertedTo && (
-                      <button className="link" onClick={() => wm.open(i.convertedTo!.table === 'tasks' ? 'tasks' : i.convertedTo!.table === 'notes' ? 'notes' : i.convertedTo!.table === 'events' ? 'calendar' : 'subjects', { taskId: i.convertedTo!.id, noteId: i.convertedTo!.id, subjectId: i.subjectId, tab: 'temario' })}>
-                        → abrir {i.convertedTo.table === 'tasks' ? 'tarea' : i.convertedTo.table === 'notes' ? 'nota' : i.convertedTo.table === 'events' ? 'evento' : 'tema'}
+                      <button className="link" onClick={() => wm.open(i.convertedTo!.table === 'tasks' ? 'tasks' : i.convertedTo!.table === 'notes' ? 'notes' : i.convertedTo!.table === 'events' ? 'calendar' : i.convertedTo!.table === 'cards' ? 'cards' : 'subjects', { taskId: i.convertedTo!.id, noteId: i.convertedTo!.id, subjectId: i.subjectId, tab: 'temario' })}>
+                        → abrir {i.convertedTo.table === 'tasks' ? 'tarea' : i.convertedTo.table === 'notes' ? 'nota' : i.convertedTo.table === 'events' ? 'evento' : i.convertedTo.table === 'cards' ? 'tarjeta' : 'tema'}
                       </button>
                     )}
                   </div>
@@ -179,6 +183,7 @@ export default function Inbox() {
                     <Btn small title="Convertir en tarea" onClick={() => void run(() => convert(i, 'task'))}>Tarea</Btn>
                     <Btn small title="Agregar al temario de la materia" onClick={() => void run(() => convert(i, 'topic'))}>Tema</Btn>
                     <Btn small title="Convertir en apunte" onClick={() => void run(() => convert(i, 'note'))}>Nota</Btn>
+                    {(i.kind === 'palabra' || i.kind === 'duda' || i.kind === 'tema') && <Btn small title="Crear tarjeta de memoria" onClick={() => void run(() => convert(i, 'card'))}>Tarjeta</Btn>}
                     {i.due && <Btn small title="Agregar a la agenda" onClick={() => void run(() => convert(i, 'event'))}>Evento</Btn>}
                     {i.kind === 'duda' && <Btn small title="Marcar duda como resuelta" onClick={() => void patch('inbox', i.id, { resolved: true, processed: true })}>Resuelta</Btn>}
                     <Btn small title="Archivar sin convertir" onClick={() => void patch('inbox', i.id, { processed: true })}>✓</Btn>

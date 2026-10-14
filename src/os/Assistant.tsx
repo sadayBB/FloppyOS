@@ -5,19 +5,20 @@ import { KIND_LABEL, parseCapture } from '../lib/parse';
 import { useUnlocked } from '../lib/stickers';
 import { Pixel } from '../pixel/Pixel';
 import { stickerById } from '../pixel/stickers';
-import type { SpriteName } from '../pixel/sprites';
+import { CatSprite, useCat } from '../pixel/cat';
 import { useWM } from './wm';
 
-export type AssistantId = 'clippy' | 'rover';
-
-const CHARACTERS: Record<AssistantId, { name: string; sprite: SpriteName; blink: SpriteName; scale: number; hello: string; placeholder: string }> = {
-  clippy: { name: 'Clippy', sprite: 'clippy', blink: 'clippyBlink', scale: 4, hello: 'Parece que estás estudiando. ¿Necesitas ayuda?', placeholder: '¿Algo que no quieras olvidar?' },
-  rover: { name: 'Rover', sprite: 'rover', blink: 'roverBlink', scale: 4, hello: '¡Guau! Aquí estoy si necesitas buscar o anotar algo.', placeholder: '¡Guau! ¿Qué anoto?' },
-};
+export type AssistantId = 'clippy' | 'cat';
 
 /** Desktop assistant: explainable insights from the user's data, sticker news, and quick capture. */
-export function Assistant({ who, onHide }: { who: AssistantId; onHide: () => void }) {
-  const ch = CHARACTERS[who];
+export function Assistant({ who: rawWho, onHide }: { who: AssistantId | 'rover'; onHide: () => void }) {
+  const who: AssistantId = rawWho === 'rover' ? 'cat' : rawWho; // Rover was retired; old settings become the cat
+  const cat = useCat();
+  const ch =
+    who === 'cat'
+      ? { name: cat.name || 'Michi', placeholder: '¡Miau! ¿Qué anoto?', hello: 'Miau~ Aquí estoy si necesitas anotar algo.' }
+      : { name: 'Clippy', placeholder: '¿Algo que no quieras olvidar?', hello: 'Parece que estás estudiando. ¿Necesitas ayuda?' };
+  const [tailUp, setTailUp] = useState(false);
   const base = useInsights();
   const unlocked = useUnlocked();
   const [seen, setSeen] = useLocal<string[] | null>('seenStickers', null);
@@ -48,7 +49,11 @@ export function Assistant({ who, onHide }: { who: AssistantId; onHide: () => voi
       setBlink(true);
       setTimeout(() => setBlink(false), 160);
     }, 4200);
-    return () => clearInterval(id);
+    const wag = setInterval(() => setTailUp((t) => !t), 900);
+    return () => {
+      clearInterval(id);
+      clearInterval(wag);
+    };
   }, []);
 
   const firstAlert = insights.find((i) => i.tone === 'alert' || i.id === 'onboard');
@@ -72,7 +77,7 @@ export function Assistant({ who, onHide }: { who: AssistantId; onHide: () => voi
     const p = parseCapture(text, subjects);
     setText('');
     await create('inbox', { text: p.text, kind: p.kind, subjectId: p.subjectId, tags: p.tags, due: p.due, dueTime: p.dueTime, estimateMin: p.estimateMin, priority: p.priority, processed: false });
-    setSaved(`${who === 'rover' ? '¡Guau! ' : ''}Guardado en la Bandeja como «${KIND_LABEL[p.kind]}».`);
+    setSaved(`${who === 'cat' ? '¡Miau! ' : ''}Guardado en la Bandeja como «${KIND_LABEL[p.kind]}».`);
     setTimeout(() => setSaved(null), 2500);
   };
 
@@ -98,7 +103,11 @@ export function Assistant({ who, onHide }: { who: AssistantId; onHide: () => voi
         </div>
       )}
       <button className="assistant-sprite" aria-label={`${ch.name}, tu asistente`} title={ch.hello} onClick={() => setOpen((o) => !o)}>
-        <Pixel sprite={blink ? ch.blink : ch.sprite} scale={ch.scale} />
+        {who === 'cat' ? (
+          <CatSprite frame={blink ? 'catBlink' : tailUp ? 'catTail' : 'cat'} scale={3} palette={cat.palette} />
+        ) : (
+          <Pixel sprite={blink ? 'clippyBlink' : 'clippy'} scale={4} />
+        )}
       </button>
     </div>
   );
