@@ -48,7 +48,8 @@ export default defineConfig({
         lang: 'es',
         theme_color: '#7a5fd0',
         background_color: '#a98ae6',
-        display: 'standalone',
+        display: 'fullscreen',
+        display_override: ['fullscreen', 'standalone'],
         orientation: 'any',
         start_url: './',
         icons: [

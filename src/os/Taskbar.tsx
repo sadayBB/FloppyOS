@@ -8,6 +8,11 @@ import { fmtClock, remainingMs, useTimer } from '../lib/timer';
 import { Pixel } from '../pixel/Pixel';
 import { useWM } from './wm';
 
+function toggleFullscreen() {
+  if (document.fullscreenElement) void document.exitFullscreen();
+  else void document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(() => undefined);
+}
+
 const SYNC_LABEL: Record<string, string> = {
   signed_out: 'Sincronización: sin sesión',
   idle: 'Sincronizado',
@@ -72,6 +77,12 @@ export function Taskbar({ assistantHidden, onShowAssistant }: { assistantHidden:
               <button role="menuitem" onClick={launch(lockNow)}>
                 <Pixel sprite="computer" scale={2} />
                 <span>Bloquear</span>
+              </button>
+            )}
+            {document.fullscreenEnabled && (
+              <button role="menuitem" onClick={launch(toggleFullscreen)}>
+                <Pixel sprite="computer" scale={2} />
+                <span>{document.fullscreenElement ? 'Salir de pantalla completa' : 'Pantalla completa'}</span>
               </button>
             )}
             <button role="menuitem" onClick={launch(() => wm.open('settings', { tab: 'sync' }))}>
