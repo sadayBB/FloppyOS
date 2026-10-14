@@ -135,15 +135,24 @@ export async function init() {
   if (session) void syncNow();
 }
 
+function cleanEmail(raw: string) {
+  const email = raw.trim().toLowerCase();
+  if (email.includes(',')) throw new Error('El correo tiene una coma: ¿quisiste poner un punto?');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('Ese correo no parece válido.');
+  return email;
+}
+
 export async function signIn(email: string, password: string) {
   if (!client) throw new Error('Configura primero la URL y la clave de Supabase.');
-  const { error } = await client.auth.signInWithPassword({ email, password });
-  if (error) throw new Error(error.message);
+  const { error } = await client.auth.signInWithPassword({ email: cleanEmail(email), password });
+  if (error) throw new Error(error.message === 'Email not confirmed' ? 'Falta confirmar tu correo: abre el enlace que te mandó Supabase.' : error.message === 'Invalid login credentials' ? 'Correo o contraseña incorrectos.' : error.message);
   await syncNow();
 }
 export async function signUp(email: string, password: string) {
   if (!client) throw new Error('Configura primero la URL y la clave de Supabase.');
-  const { data, error } = await client.auth.signUp({ email, password });
+  // The confirmation link returns to this same app (Supabase must list it under Redirect URLs).
+  const emailRedirectTo = location.origin + location.pathname;
+  const { data, error } = await client.auth.signUp({ email: cleanEmail(email), password, options: { emailRedirectTo } });
   if (error) throw new Error(error.message);
   if (!data.session) return 'Cuenta creada. Revisa tu correo para confirmarla y luego inicia sesión.';
   await syncNow();
