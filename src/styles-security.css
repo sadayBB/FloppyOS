@@ -1,0 +1,41 @@
+/* Bloqueo, privacidad y acerca de */
+.lock-screen {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: var(--desk-bg);
+  z-index: 20000;
+}
+.lock-dialog { width: min(440px, 100%); }
+.lock-banner {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(90deg, var(--title-a), var(--title-b));
+  color: #fff;
+  font-size: 30px;
+  letter-spacing: 1px;
+  text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.25);
+}
+.lock-banner b { color: #ffe27a; }
+.lock-body { display: flex; gap: 14px; align-items: center; padding: 16px; }
+.lock-body.column { flex-direction: column; align-items: stretch; }
+.lock-fields { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.lock-fields .input { font-size: 18px; letter-spacing: 4px; }
+
+.wide-card { align-items: flex-start; text-align: left; max-width: 260px; }
+.sec-checks { list-style: none; padding: 0; margin: 10px 0; display: flex; flex-direction: column; gap: 4px; }
+.sec-checks li { display: flex; flex-direction: column; padding: 6px 8px; box-shadow: var(--in); }
+.sec-checks li.ok { background: var(--ok-bg); }
+.sec-checks li.bad { background: var(--alert-bg); }
+.sec-checks li span { font-size: 13px; color: var(--ink-soft); }
+.privacy-table th { width: 32%; vertical-align: top; text-align: left; padding: 6px; }
+.privacy-table td { padding: 6px; }
+.privacy-table tr { border-bottom: 1px dotted var(--sh); }
+
+.about-head { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
+.about-head h3 { margin: 0; font-size: 22px; }
+.about ul { padding-left: 20px; }

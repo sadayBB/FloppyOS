@@ -233,3 +233,58 @@ setInterval(() => void syncNow(), 120000);
 
 /** For features that talk to Supabase directly (push reminders). */
 export const getClient = () => (session ? client : null);
+
+/** Fresh access token + project URL, for calling this project's Edge Functions as the signed-in user. */
+export async function getFunctionAuth(): Promise<{ url: string; token: string } | null> {
+  const cfg = getConfig();
+  if (!client || !cfg) return null;
+  const { data } = await client.auth.getSession(); // refreshes the token when needed
+  return data.session ? { url: cfg.url, token: data.session.access_token } : null;
+}
+
+/** Signs out this device, or every device when `everywhere` (revokes all refresh tokens). */
+export async function signOutEverywhere() {
+  await client?.auth.signOut({ scope: 'global' });
+  set({ phase: 'signed_out', email: undefined });
+}
+
+export interface SecurityCheck {
+  label: string;
+  ok: boolean;
+  detail: string;
+}
+
+/**
+ * Probes the project the way a stranger would: without a session, using only the public key.
+ * Every check should come back blocked or empty.
+ */
+export async function runSecurityChecks(): Promise<SecurityCheck[]> {
+  const cfg = getConfig();
+  if (!cfg) throw new Error('Primero conecta Supabase.');
+  if (!navigator.onLine) throw new Error('Necesitas internet para revisar la seguridad.');
+  const anon = createClient(cfg.url, cfg.anonKey, { auth: { persistSession: false, autoRefreshToken: false, storageKey: 'floppyos.securitycheck' } });
+  const out: SecurityCheck[] = [];
+
+  const read = async (table: string, label: string) => {
+    const { data, error } = await anon.from(table).select('*').limit(1);
+    const blocked = !!error || (data?.length ?? 0) === 0;
+    out.push({ label, ok: blocked, detail: blocked ? 'Bloqueado para desconocidos ✓' : '¡Se pudieron leer filas sin iniciar sesión!' });
+  };
+  await read('records', 'Tus datos (records) sin sesión');
+  await read('reminders', 'Tus recordatorios sin sesión');
+  await read('push_subscriptions', 'Tus dispositivos de notificaciones sin sesión');
+
+  const { error: rpcErr } = await anon.rpc('push_records', { rows: [] });
+  out.push({ label: 'Escribir datos sin sesión', ok: !!rpcErr, detail: rpcErr ? 'Bloqueado ✓' : 'La función de escritura acepta llamadas anónimas: ejecuta supabase/security.sql' });
+
+  try {
+    const r = await fetch(`${cfg.url}/auth/v1/settings`, { headers: { apikey: cfg.anonKey } });
+    const s = (await r.json()) as { disable_signup?: boolean };
+    out.push({ label: 'Registro de cuentas nuevas', ok: !!s.disable_signup, detail: s.disable_signup ? 'Desactivado: nadie más puede crear cuenta ✓' : 'Abierto: cualquiera podría crear una cuenta (no vería tus datos, pero conviene cerrarlo en Authentication → Sign In / Providers)' });
+  } catch {
+    out.push({ label: 'Registro de cuentas nuevas', ok: false, detail: 'No se pudo comprobar' });
+  }
+
+  out.push({ label: 'Clave en la app', ok: !cfg.anonKey.startsWith('sb_secret_'), detail: 'Solo se usa la clave pública (publishable) ✓' });
+  return out;
+}

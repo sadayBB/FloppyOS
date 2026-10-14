@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { create, patch, remove, useRows, type ID, type Reference, type RefKind, type RefStatus, type Subject } from '../db';
 import { parseReference, referenceLinks, verifyReference, VERIFY_LABEL, type Candidate } from '../lib/biblio';
 import { Btn, Chip, Empty, Field, LazyInput, Modal } from '../os/ui';
+import { safeUrl } from '../lib/safeUrl';
 
 const KIND: Record<RefKind, string> = { obligatoria: 'Obligatoria', complementaria: 'Complementaria', recomendada: 'Recomendada por el profe' };
 const STATUS: Record<RefStatus, string> = { por_conseguir: 'Por conseguir', disponible: 'Ya la tengo', leyendo: 'Leyendo', terminada: 'Terminada' };
@@ -109,7 +110,7 @@ export function Bibliography({ subject }: { subject: Subject }) {
                 {r.topicIds.length > 0 && <span>📌 {r.topicIds.map((id) => topics.find((t) => t.id === id)?.title).filter(Boolean).join(', ')}</span>}
               </div>
               <div className="row-meta links">
-                {referenceLinks(r).map((l) => <a key={l.url} href={l.url} target="_blank" rel="noreferrer">{l.label}</a>)}
+                {referenceLinks(r).map((l) => safeUrl(l.url) && <a key={l.url} href={safeUrl(l.url)} target="_blank" rel="noreferrer noopener">{l.label}</a>)}
               </div>
               <div className="hint">Origen: {r.source.detail ?? r.source.origin}</div>
             </div>
@@ -216,7 +217,7 @@ function ReviewModal({ review: { ref, cand }, onClose }: { review: { ref: Refere
               ))}
             </tbody>
           </table>
-          <p className="hint">Fuente: <a href={cand.url} target="_blank" rel="noreferrer">{cand.url}</a>{cand.openAccess && <> · <a href={cand.openAccess} target="_blank" rel="noreferrer">copia de acceso abierto</a></>}</p>
+          <p className="hint">Fuente: <a href={safeUrl(cand.url)} target="_blank" rel="noreferrer noopener">{cand.url}</a>{cand.openAccess && <> · <a href={safeUrl(cand.openAccess)} target="_blank" rel="noreferrer noopener">copia de acceso abierto</a></>}</p>
         </div>
       )}
     </Modal>

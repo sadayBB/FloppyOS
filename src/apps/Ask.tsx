@@ -50,7 +50,7 @@ export default function Ask() {
         <div className="welcome">
           <CatSprite scale={4} palette={cat.palette} />
           <h3>Pregúntale a {cat.name || 'Michi'}</h3>
-          <p>Para usar la IA necesitas una clave de API de Claude. Se guarda solo en este dispositivo.</p>
+          <p>Para usar esta función, activa la IA en Panel de control → IA. Te recomendamos guardar la clave en tu Supabase para que nunca quede en tus dispositivos.</p>
           <Btn primary onClick={() => wm.open('settings', { tab: 'ai' })}>Configurar IA</Btn>
         </div>
       </div>

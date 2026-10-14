@@ -7,7 +7,9 @@ import webpush from 'npm:web-push@3.6.7';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 Deno.serve(async (req) => {
-  if (req.headers.get('x-cron-secret') !== Deno.env.get('CRON_SECRET')) {
+  // Fail closed: without a configured secret, nobody can trigger sends.
+  const secret = Deno.env.get('CRON_SECRET');
+  if (!secret || secret.length < 16 || req.headers.get('x-cron-secret') !== secret) {
     return new Response('forbidden', { status: 403 });
   }
 

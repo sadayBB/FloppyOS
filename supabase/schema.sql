@@ -37,4 +37,6 @@ begin
     where excluded.updated_at > records.updated_at;
 end;
 $$;
+revoke all on table public.records from anon;
+revoke execute on function public.push_records(jsonb) from public, anon;
 grant execute on function public.push_records(jsonb) to authenticated;

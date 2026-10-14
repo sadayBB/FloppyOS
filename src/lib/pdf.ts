@@ -3,7 +3,7 @@ export async function pdfToText(file: File, onProgress?: (page: number, total: n
   const pdfjs = await import('pdfjs-dist');
   const worker = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
   pdfjs.GlobalWorkerOptions.workerSrc = worker;
-  const doc = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+  const doc = await pdfjs.getDocument({ data: await file.arrayBuffer(), isEvalSupported: false }).promise;
   let text = '';
   let emptyPages = 0;
   for (let p = 1; p <= doc.numPages; p++) {

@@ -1,7 +1,10 @@
-import { useEffect, useState, type PointerEvent as RPointerEvent } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as RPointerEvent } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { APP_LIST, type AppId } from './apps/meta';
 import { APP_COMPONENTS } from './apps/registry';
-import { useSetting } from './db';
+import { db, useSetting } from './db';
+import type { LockConfig } from './lib/lock';
+import { LockScreen } from './os/LockScreen';
 import { init as initSync } from './lib/sync';
 import { useWallpaperCss } from './lib/wallpaper';
 import { useReminderEngine } from './lib/reminders';
@@ -80,6 +83,35 @@ function Desktop() {
 }
 
 export default function App() {
+  // undefined while loading → render nothing, so the desktop never flashes before the lock appears.
+  const lock = useLiveQuery(async () => ((await db.local.get('lock'))?.value as LockConfig | undefined) ?? null);
+  const [unlocked, setUnlocked] = useState(false);
+  const last = useRef(Date.now());
+
+  useEffect(() => {
+    const touch = () => (last.current = Date.now());
+    const doLock = () => setUnlocked(false);
+    const onVis = () => {
+      if (document.visibilityState === 'visible' && lock?.autoLockMin && Date.now() - last.current > lock.autoLockMin * 60000) doLock();
+    };
+    const id = setInterval(() => {
+      if (lock?.autoLockMin && Date.now() - last.current > lock.autoLockMin * 60000) doLock();
+    }, 15000);
+    window.addEventListener('pointerdown', touch);
+    window.addEventListener('keydown', touch);
+    window.addEventListener('floppyos-lock', doLock);
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener('pointerdown', touch);
+      window.removeEventListener('keydown', touch);
+      window.removeEventListener('floppyos-lock', doLock);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, [lock?.autoLockMin]);
+
+  if (lock === undefined) return null;
+  if (lock && !unlocked) return <LockScreen cfg={lock} onUnlock={() => { last.current = Date.now(); setUnlocked(true); }} />;
   return (
     <WMProvider>
       <Desktop />

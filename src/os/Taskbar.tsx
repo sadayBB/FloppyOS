@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { APP_LIST, APPS } from '../apps/meta';
-import { useRows } from '../db';
+import { useLocal, useRows } from '../db';
+import { lockNow } from '../lib/lock';
 import { pad } from '../lib/dates';
 import { useSync } from '../lib/sync';
 import { fmtClock, remainingMs, useTimer } from '../lib/timer';
@@ -22,6 +23,8 @@ export function Taskbar({ assistantHidden, onShowAssistant }: { assistantHidden:
   const timer = useTimer();
   const inbox = useRows('inbox').filter((i) => !i.processed).length;
   const sync = useSync();
+  const [lockCfg] = useLocal<unknown>('lock', null);
+  const locked = lockCfg != null;
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 15000);
@@ -63,6 +66,12 @@ export function Taskbar({ assistantHidden, onShowAssistant }: { assistantHidden:
               <button role="menuitem" onClick={launch(onShowAssistant)}>
                 <Pixel sprite="clippy" scale={1} />
                 <span>Mostrar asistente</span>
+              </button>
+            )}
+            {locked && (
+              <button role="menuitem" onClick={launch(lockNow)}>
+                <Pixel sprite="computer" scale={2} />
+                <span>Bloquear</span>
               </button>
             )}
             <button role="menuitem" onClick={launch(() => wm.open('settings', { tab: 'sync' }))}>

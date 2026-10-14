@@ -1,11 +1,15 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import type { z } from 'zod';
+import { getFunctionAuth } from './sync';
 
 /*
- * Claude integration. The API key lives only on this device (localStorage), never in the repo or
- * the synced data. Nothing is sent to Anthropic unless the user presses a ✨ button.
- * Every AI result is shown as a suggestion the user reviews before anything is saved (RF-112, RF-120).
+ * Claude integration. Two ways to hold the API key:
+ *  - "supabase" (recommended): the key is a secret of the user's Supabase project; requests go through
+ *    the claude-proxy Edge Function, which only accepts the owner's session. The key never touches a device.
+ *  - "device": the key is kept in this browser's storage (never synced, never in the repo).
+ * Nothing is sent to Anthropic unless the user presses a ✨ button, and every AI result is a
+ * suggestion the user reviews before anything is saved (RF-112, RF-120).
  */
 
 export type AiModel = 'claude-opus-5-5' | 'claude-sonnet-5-5' | 'claude-haiku-5-5';
@@ -16,14 +20,15 @@ export const AI_MODELS: { id: AiModel; name: string; note: string }[] = [
 ];
 
 const KEY = 'floppyos.ai';
-interface AiConfig {
-  apiKey: string;
-  model: AiModel;
-}
+export type AiConfig = { mode: 'supabase'; model: AiModel } | { mode: 'device'; apiKey: string; model: AiModel };
+
 export function getAiConfig(): AiConfig | null {
   try {
-    const c = JSON.parse(localStorage.getItem(KEY) ?? 'null') as AiConfig | null;
-    return c?.apiKey ? { apiKey: c.apiKey, model: c.model ?? 'claude-opus-5-5' } : null;
+    const c = JSON.parse(localStorage.getItem(KEY) ?? 'null');
+    if (!c) return null;
+    const model: AiModel = c.model ?? 'claude-opus-5-5';
+    if (c.mode === 'supabase') return { mode: 'supabase', model };
+    return c.apiKey ? { mode: 'device', apiKey: c.apiKey, model } : null;
   } catch {
     return null;
   }
@@ -37,11 +42,19 @@ export const aiReady = () => !!getAiConfig();
 
 export class AiError extends Error {}
 
-function client() {
+async function client() {
   const cfg = getAiConfig();
-  if (!cfg) throw new AiError('Configura tu clave de Claude en Panel de control → IA.');
+  if (!cfg) throw new AiError('Configura la IA en Panel de control → IA.');
   if (!navigator.onLine) throw new AiError('La IA necesita internet. Todo lo demás sigue funcionando sin conexión.');
-  // Single-user app on the owner's own devices: the key is the user's and stays local.
+  if (cfg.mode === 'supabase') {
+    const auth = await getFunctionAuth();
+    if (!auth) throw new AiError('Inicia sesión en Sincronización para usar la IA guardada en Supabase.');
+    // The SDK talks to the proxy; it sends our session as the bearer token and never sees the API key.
+    return {
+      c: new Anthropic({ apiKey: null, authToken: auth.token, baseURL: `${auth.url}/functions/v1/claude-proxy`, dangerouslyAllowBrowser: true, maxRetries: 2 }),
+      model: cfg.model,
+    };
+  }
   return { c: new Anthropic({ apiKey: cfg.apiKey, dangerouslyAllowBrowser: true, maxRetries: 2 }), model: cfg.model };
 }
 
@@ -51,8 +64,8 @@ const fallbackParams = (model: AiModel) =>
 
 function explain(e: unknown): never {
   if (e instanceof AiError) throw e;
-  if (e instanceof Anthropic.AuthenticationError) throw new AiError('La clave de API no es válida. Revísala en Panel de control → IA.');
-  if (e instanceof Anthropic.PermissionDeniedError) throw new AiError('Tu clave no tiene permiso para este modelo.');
+  if (e instanceof Anthropic.AuthenticationError) throw new AiError('No autorizado: revisa la clave de API (o, en modo Supabase, tu sesión y el secreto ANTHROPIC_API_KEY).');
+  if (e instanceof Anthropic.PermissionDeniedError) throw new AiError(`Acceso denegado: ${e.message}`);
   if (e instanceof Anthropic.RateLimitError) throw new AiError('Demasiadas solicitudes seguidas. Espera un momento y vuelve a intentar.');
   if (e instanceof Anthropic.BadRequestError) throw new AiError(`Solicitud rechazada: ${e.message}`);
   if (e instanceof Anthropic.APIConnectionError) throw new AiError('No pude conectar con Claude. ¿Hay internet?');
@@ -67,7 +80,7 @@ const BASE_SYSTEM =
 
 /** Structured call: returns data validated against the Zod schema. */
 export async function askJSON<S extends z.ZodType>(schema: S, task: string, input: string, effort: 'low' | 'medium' | 'high' = 'low'): Promise<z.infer<S>> {
-  const { c, model } = client();
+  const { c, model } = await client();
   try {
     const res = await c.beta.messages.parse({
       model,
@@ -88,7 +101,7 @@ export async function askJSON<S extends z.ZodType>(schema: S, task: string, inpu
 
 /** Free-text call (summaries, answers). History alternates user/assistant. */
 export async function askText(task: string, messages: { role: 'user' | 'assistant'; content: string }[], effort: 'low' | 'medium' | 'high' = 'medium'): Promise<string> {
-  const { c, model } = client();
+  const { c, model } = await client();
   try {
     const res = await c.beta.messages
       .stream({

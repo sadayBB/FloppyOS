@@ -5,6 +5,7 @@ import { isOpen, TASK_STATUS } from '../lib/labels';
 import { Btn, Chip, Empty, Field, Input, LazyInput, Progress, Select, SubjectSelect, Tabs } from '../os/ui';
 import { useWM } from '../os/wm';
 import { toggleDone } from './Tasks';
+import { safeUrl } from '../lib/safeUrl';
 
 type Tab = 'resumen' | 'tablero' | 'entrega' | 'bitacora';
 const BOARD: TaskStatus[] = ['pendiente', 'en_progreso', 'bloqueada', 'completada'];
@@ -115,7 +116,7 @@ function ProjectView({ p, tasks, subjects, onBack }: { p: Project; tasks: Task[]
               <div className="section-title">Recursos y enlaces</div>
               <ul className="plain">
                 {p.links.map((l) => (
-                  <li key={l.id}><a href={l.url} target="_blank" rel="noreferrer">{l.label || l.url}</a> <button className="link muted" onClick={() => set({ links: p.links.filter((x) => x.id !== l.id) })}>×</button></li>
+                  <li key={l.id}>{safeUrl(l.url) ? <a href={safeUrl(l.url)} target="_blank" rel="noreferrer noopener">{l.label || l.url}</a> : <span>{l.label || l.url}</span>} <button className="link muted" onClick={() => set({ links: p.links.filter((x) => x.id !== l.id) })}>×</button></li>
                 ))}
               </ul>
               <InlineAdd placeholder="Pega un enlace (repo, Drive, Figma…)" onAdd={(t) => set({ links: [...p.links, { id: newId(), label: t.replace(/^https?:\/\/(www\.)?/, '').slice(0, 50), url: /^https?:\/\//.test(t) ? t : `https://${t}` }] })} />

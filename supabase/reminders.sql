@@ -57,4 +57,7 @@ begin
   delete from public.reminders where user_id = auth.uid() and sent_at < now() - interval '7 days';
 end;
 $$;
+revoke all on table public.push_subscriptions from anon;
+revoke all on table public.reminders from anon;
+revoke execute on function public.replace_reminders(jsonb) from public, anon;
 grant execute on function public.replace_reminders(jsonb) to authenticated;

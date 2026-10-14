@@ -3,7 +3,9 @@ import type { ThemeId } from '../App';
 import { DATA_TABLES, db, useLocal, useSetting } from '../db';
 import { downloadJSON, exportAll, mergeBackup } from '../lib/backup';
 import { today } from '../lib/dates';
-import { configure, fullResync, getConfig, signIn, signOut, signUp, syncNow, useSync } from '../lib/sync';
+import { configure, fullResync, getConfig, runSecurityChecks, signIn, signOut, signOutEverywhere, signUp, syncNow, useSync, type SecurityCheck } from '../lib/sync';
+import { lockNow, lockSupported, removePin, setPin, updateAutoLock, type LockConfig } from '../lib/lock';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { DEFAULT_REMINDERS, disablePush, enablePush, testNotification, type ReminderDefaults } from '../lib/reminders';
 import { ReminderPicker } from '../os/ReminderPicker';
 import { MAX_UPLOAD, PRESETS, type Fit, type Wallpaper } from '../lib/wallpaper';
@@ -13,7 +15,7 @@ import { CatSprite, EYES, FURS, useCat, type CatLook } from '../pixel/cat';
 import { Btn, Field, Input, Select, Tabs } from '../os/ui';
 import { AI_MODELS, getAiConfig, setAiConfig, testAi, type AiModel } from '../lib/ai';
 
-type Tab = 'general' | 'look' | 'sync' | 'alerts' | 'ai' | 'backup' | 'about';
+type Tab = 'general' | 'look' | 'sync' | 'alerts' | 'ai' | 'privacy' | 'backup' | 'about';
 
 export default function Settings({ tab: initTab }: { tab?: Tab }) {
   const [tab, setTab] = useState<Tab>(initTab ?? 'look');
@@ -27,6 +29,7 @@ export default function Settings({ tab: initTab }: { tab?: Tab }) {
           { id: 'general', label: 'Estudio' },
           { id: 'alerts', label: 'Avisos' },
           { id: 'ai', label: 'IA' },
+          { id: 'privacy', label: 'Privacidad' },
           { id: 'sync', label: 'Sincronización' },
           { id: 'backup', label: 'Respaldo' },
           { id: 'about', label: 'Acerca de' },
@@ -38,6 +41,7 @@ export default function Settings({ tab: initTab }: { tab?: Tab }) {
         {tab === 'sync' && <Sync />}
         {tab === 'alerts' && <Alerts />}
         {tab === 'ai' && <AiSettings />}
+        {tab === 'privacy' && <Privacy />}
         {tab === 'backup' && <Backup />}
         {tab === 'about' && <About />}
       </div>
@@ -282,15 +286,15 @@ function Sync() {
 
 function AiSettings() {
   const cfg = getAiConfig();
+  const sync = useSync();
+  const [mode, setMode] = useState<'supabase' | 'device'>(cfg?.mode ?? 'supabase');
   const [key, setKey] = useState('');
   const [model, setModel] = useState<AiModel>(cfg?.model ?? 'claude-opus-5-5');
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [, force] = useState(0);
-  const save = (apiKey: string) => {
-    setAiConfig({ apiKey, model });
-    force((n) => n + 1);
-  };
+  const signedIn = sync.phase !== 'unconfigured' && sync.phase !== 'signed_out';
+
   const test = async () => {
     setBusy(true);
     setMsg(null);
@@ -301,35 +305,171 @@ function AiSettings() {
     }
     setBusy(false);
   };
+  const changeModel = (m: AiModel) => {
+    setModel(m);
+    if (cfg) setAiConfig({ ...cfg, model: m });
+  };
+
   return (
     <div className="prose">
       <h3>Inteligencia artificial (Claude)</h3>
-      <p>Las funciones con ✨ usan Claude, de Anthropic: interpretar notas rápidas, dividir tareas en pasos, crear tarjetas desde tus apuntes, resumir clases, ordenar temarios difíciles y responder preguntas sobre tu semestre.</p>
-      <ul className="steps">
-        <li>Crea una clave en <a href="https://platform.claude.com/settings/keys" target="_blank" rel="noreferrer">platform.claude.com → API Keys</a> (requiere saldo; cada uso cuesta centavos).</li>
-        <li>Se guarda <b>solo en este dispositivo</b>: no se sincroniza ni se sube a GitHub. En la tablet tendrás que pegarla también.</li>
-        <li>Solo se envía información a Claude cuando tocas un botón ✨, y nada se guarda sin que lo revises.</li>
-      </ul>
+      <p>Las funciones marcadas con ✨ usan Claude, de Anthropic. Solo se envía información cuando tocas un botón ✨, y nada se guarda sin tu revisión. Anthropic no usa los datos enviados por la API para entrenar sus modelos.</p>
+
       {cfg ? (
-        <p className="notice">✓ Clave configurada (…{cfg.apiKey.slice(-4)})</p>
+        <p className="notice">
+          ✓ IA activada · {cfg.mode === 'supabase' ? 'clave guardada en tu Supabase (no está en este dispositivo)' : `clave guardada en este dispositivo (…${cfg.apiKey.slice(-4)})`}
+        </p>
       ) : (
-        <div className="form">
-          <Field label="Clave de API" wide><Input type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value.trim())} placeholder="sk-ant-…" /></Field>
-        </div>
+        <>
+          <h3>¿Dónde guardar la clave?</h3>
+          <div className="assistant-pick">
+            <button className={`theme-card wide-card ${mode === 'supabase' ? 'on' : ''}`} onClick={() => setMode('supabase')}>
+              <b>En tu Supabase (recomendado)</b>
+              <span className="hint">La clave nunca llega a tus dispositivos. Solo tu cuenta puede usarla.</span>
+            </button>
+            <button className={`theme-card wide-card ${mode === 'device' ? 'on' : ''}`} onClick={() => setMode('device')}>
+              <b>En este dispositivo</b>
+              <span className="hint">Más simple, pero quien use este equipo podría extraerla.</span>
+            </button>
+          </div>
+          {mode === 'supabase' ? (
+            <>
+              <ol className="steps">
+                <li>En Supabase: <b>Edge Functions → Deploy a new function → Via editor</b>, nómbrala <code>claude-proxy</code> y pega el archivo <code>supabase/functions/claude-proxy/index.ts</code> del proyecto. En sus ajustes, desactiva <b>Verify JWT</b> (la función verifica tu sesión por su cuenta).</li>
+                <li><b>Edge Functions → Secrets</b>: agrega <code>ANTHROPIC_API_KEY</code> (tu clave de <a href="https://platform.claude.com/settings/keys" target="_blank" rel="noreferrer noopener">platform.claude.com</a>) y <code>OWNER_EMAIL</code> (el correo con el que inicias sesión en FloppyOS).</li>
+                <li>Vuelve aquí y pulsa «Activar».</li>
+              </ol>
+              {!signedIn && <p className="warn">Primero conecta e inicia sesión en la pestaña Sincronización.</p>}
+              <Btn primary disabled={!signedIn} onClick={() => { setAiConfig({ mode: 'supabase', model }); force((n) => n + 1); void test(); }}>Activar</Btn>
+            </>
+          ) : (
+            <>
+              <div className="form">
+                <Field label="Clave de API" wide><Input type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value.trim())} placeholder="sk-ant-…" /></Field>
+              </div>
+              <Btn primary disabled={!key.startsWith('sk-ant-')} onClick={() => { setAiConfig({ mode: 'device', apiKey: key, model }); setKey(''); force((n) => n + 1); }}>Guardar clave</Btn>
+            </>
+          )}
+        </>
       )}
+
       <div className="form">
         <Field label="Modelo" wide>
-          <Select value={model} onChange={(e) => { const m = e.target.value as AiModel; setModel(m); if (cfg) setAiConfig({ ...cfg, model: m }); }}>
+          <Select value={model} onChange={(e) => changeModel(e.target.value as AiModel)}>
             {AI_MODELS.map((m) => <option key={m.id} value={m.id}>{m.name} — {m.note}</option>)}
           </Select>
         </Field>
       </div>
-      <div className="row-btns">
-        {!cfg && <Btn primary disabled={!key.startsWith('sk-')} onClick={() => save(key)}>Guardar clave</Btn>}
-        {cfg && <Btn primary disabled={busy} onClick={() => void test()}>{busy ? 'Probando…' : 'Probar conexión'}</Btn>}
-        {cfg && <Btn onClick={() => { setAiConfig(null); setKey(''); force((n) => n + 1); }}>Quitar clave</Btn>}
-      </div>
+      {cfg && (
+        <div className="row-btns">
+          <Btn primary disabled={busy} onClick={() => void test()}>{busy ? 'Probando…' : 'Probar conexión'}</Btn>
+          <Btn onClick={() => { setAiConfig(null); force((n) => n + 1); setMsg(null); }}>{cfg.mode === 'device' ? 'Borrar clave de este dispositivo' : 'Desactivar IA aquí'}</Btn>
+        </div>
+      )}
       {msg && <p className="notice">{msg}</p>}
+    </div>
+  );
+}
+
+function Privacy() {
+  const sync = useSync();
+  const lock = useLiveQuery(async () => ((await db.local.get('lock'))?.value as LockConfig | undefined) ?? null);
+  const [checks, setChecks] = useState<SecurityCheck[] | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [pin1, setPin1] = useState('');
+  const [pin2, setPin2] = useState('');
+  const [auto, setAuto] = useState(5);
+  const ai = getAiConfig();
+
+  const run = async (fn: () => Promise<unknown>) => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await fn();
+      if (typeof r === 'string') setMsg(r);
+    } catch (e) {
+      setMsg(`⚠ ${(e as Error).message}`);
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div className="prose wide-prose">
+      <h3>Bloqueo con PIN</h3>
+      {!lockSupported() ? (
+        <p className="warn">Este navegador no permite el bloqueo seguro (requiere HTTPS).</p>
+      ) : lock ? (
+        <>
+          <p className="notice">✓ FloppyOS pide el PIN al abrirse{lock.autoLockMin ? ` y tras ${lock.autoLockMin} min sin uso` : ''}.</p>
+          <div className="form">
+            <Field label="Bloquear tras inactividad">
+              <Select value={lock.autoLockMin} onChange={(e) => void updateAutoLock(+e.target.value)}>
+                <option value={0}>Solo al abrir</option>
+                <option value={1}>1 minuto</option>
+                <option value={5}>5 minutos</option>
+                <option value={15}>15 minutos</option>
+                <option value={60}>1 hora</option>
+              </Select>
+            </Field>
+          </div>
+          <div className="row-btns">
+            <Btn onClick={lockNow}>Bloquear ahora</Btn>
+            <Btn onClick={() => confirm('¿Quitar el PIN de este dispositivo?') && void removePin()}>Quitar PIN</Btn>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="hint">Protege la app en este dispositivo si alguien más usa tu PC o tu tablet. Cada dispositivo tiene su propio PIN.</p>
+          <div className="form">
+            <Field label="Nuevo PIN (4 a 12 dígitos)"><Input type="password" inputMode="numeric" autoComplete="new-password" value={pin1} onChange={(e) => setPin1(e.target.value.replace(/\D/g, '').slice(0, 12))} /></Field>
+            <Field label="Repite el PIN"><Input type="password" inputMode="numeric" autoComplete="new-password" value={pin2} onChange={(e) => setPin2(e.target.value.replace(/\D/g, '').slice(0, 12))} /></Field>
+            <Field label="Bloquear tras inactividad">
+              <Select value={auto} onChange={(e) => setAuto(+e.target.value)}>
+                <option value={0}>Solo al abrir</option>
+                <option value={1}>1 minuto</option>
+                <option value={5}>5 minutos</option>
+                <option value={15}>15 minutos</option>
+                <option value={60}>1 hora</option>
+              </Select>
+            </Field>
+          </div>
+          <Btn primary disabled={pin1.length < 4 || pin1 !== pin2 || busy} onClick={() => run(async () => { await setPin(pin1, auto); setPin1(''); setPin2(''); return '✓ PIN configurado.'; })}>Activar PIN</Btn>
+          {pin2 && pin1 !== pin2 && <p className="hint late">Los PIN no coinciden.</p>}
+        </>
+      )}
+      <p className="hint">El PIN oculta la app a quien tome tu dispositivo. No cifra lo guardado: para eso, usa también el bloqueo de pantalla de tu PC y tu tablet.</p>
+
+      <h3>Revisión de seguridad de tu Supabase</h3>
+      <p className="hint">Intenta acceder a tu proyecto como lo haría un desconocido (sin sesión) y comprueba que todo esté bloqueado.</p>
+      <Btn disabled={busy || sync.phase === 'unconfigured'} onClick={() => run(async () => setChecks(await runSecurityChecks()))}>{busy ? 'Revisando…' : 'Revisar ahora'}</Btn>
+      {sync.phase === 'unconfigured' && <p className="hint">Disponible cuando conectes Supabase.</p>}
+      {checks && (
+        <ul className="sec-checks">
+          {checks.map((c) => (
+            <li key={c.label} className={c.ok ? 'ok' : 'bad'}>
+              <b>{c.ok ? '✓' : '⚠'} {c.label}</b>
+              <span>{c.detail}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <h3>Sesiones</h3>
+      <p className="hint">Si pierdes un dispositivo, cierra la sesión en todos: tendrás que volver a iniciar sesión en cada uno.</p>
+      <Btn disabled={busy || !sync.email} onClick={() => confirm('¿Cerrar la sesión en TODOS tus dispositivos?') && void run(async () => { await signOutEverywhere(); return 'Sesión cerrada en todos los dispositivos.'; })}>Cerrar sesión en todos los dispositivos</Btn>
+      {msg && <p className="notice">{msg}</p>}
+
+      <h3>Qué se guarda y dónde</h3>
+      <table className="grid-table privacy-table">
+        <tbody>
+          <tr><th>Tus datos académicos</th><td>En este dispositivo y, si sincronizas, en tu propio proyecto de Supabase, protegidos para que solo tu cuenta los lea.</td></tr>
+          <tr><th>Fondo y stickers propios</th><td>Solo en este dispositivo.</td></tr>
+          <tr><th>Clave de Claude</th><td>{!ai ? 'No configurada.' : ai.mode === 'supabase' ? 'En los secretos de tu Supabase; nunca en tus dispositivos.' : 'En este dispositivo.'}</td></tr>
+          <tr><th>Código de la app</th><td>Es público en GitHub, pero no contiene datos, contraseñas ni claves.</td></tr>
+          <tr><th>Servicios externos</th><td>La app solo puede conectarse a Supabase, Claude, Open Library y Crossref.</td></tr>
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -436,14 +576,27 @@ function Backup() {
 
 function About() {
   return (
-    <div className="prose">
-      <h3>FloppyOS 0.2</h3>
-      <p>Gestor de estudios universitarios con alma de Windows 98/2000 y pixel art. Hecho para un solo perfil.</p>
-      <h3>Instalar como app</h3>
-      <p><b>Tablet Android (Chrome):</b> menú ⋮ → «Instalar app» o «Agregar a pantalla principal». Se abre a pantalla completa, con su propio icono, y funciona sin internet.</p>
-      <p><b>PC (Chrome o Edge):</b> el icono de instalar en la barra de direcciones.</p>
-      <h3>Sin internet</h3>
-      <p>Todo funciona sin conexión: tareas, agenda, temario, apuntes, pomodoro y stickers. Solo la sincronización necesita internet, y se pone al día sola cuando vuelve.</p>
+    <div className="prose about">
+      <div className="about-head">
+        <Pixel sprite="floppy" scale={4} />
+        <div>
+          <h3>FloppyOS</h3>
+          <p className="hint">Versión 0.4 · octubre de 2026</p>
+        </div>
+      </div>
+      <p>Plataforma de gestión académica que reúne en un solo lugar materias y temarios, tareas, agenda, calificaciones, proyectos, sesiones de estudio y repasos.</p>
+      <h3>Características</h3>
+      <ul>
+        <li>Funciona sin conexión; los cambios se sincronizan al recuperar internet.</li>
+        <li>Sincronización entre dispositivos con datos protegidos por cuenta.</li>
+        <li>Calificaciones con ponderaciones por unidad y proyección de la calificación final.</li>
+        <li>Verificación de bibliografía en Open Library y Crossref.</li>
+        <li>Recordatorios y asistencia opcional con inteligencia artificial.</li>
+      </ul>
+      <h3>Instalación</h3>
+      <p><b>Android (Chrome):</b> menú ⋮ → «Instalar app». <b>Computadora (Chrome o Edge):</b> icono de instalar en la barra de direcciones.</p>
+      <h3>Créditos</h3>
+      <p className="hint">Tipografía Pixelify Sans (SIL Open Font License). Datos bibliográficos de Open Library y Crossref. Funciones de IA con Claude, de Anthropic.</p>
     </div>
   );
 }

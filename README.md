@@ -1,6 +1,6 @@
 # FloppyOS 💾
 
-Gestor de estudios universitarios con estética Windows 98/2000 + pixel art. Un solo perfil, **funciona sin internet**, se instala como app en PC y Android y se sincroniza entre dispositivos con Supabase.
+Plataforma de gestión académica: materias, temarios, tareas, agenda, calificaciones, proyectos y estudio. **Funciona sin internet**, se instala como app en PC y Android y se sincroniza entre dispositivos con Supabase.
 
 ## Desarrollo
 
@@ -22,6 +22,7 @@ npm run build      # genera dist/
    - **Publishable key** (`sb_publishable_…`) en **Project Settings → API Keys**. Nunca la *Secret key*.
 5. En FloppyOS: **Panel de control → Sincronización**, pega ambos y pulsa **Crear cuenta** (solo la primera vez). En la tablet, **Iniciar sesión** con el mismo correo.
 6. Después desactiva *Allow new users to sign up* en **Authentication** para que nadie más pueda registrarse.
+7. **SQL Editor**: ejecuta [`supabase/security.sql`](supabase/security.sql) (endurece permisos; se puede repetir). En la app, **Panel de control → Privacidad → Revisar ahora** comprueba que todo esté bloqueado para desconocidos.
 
 ### 2. Recordatorios con la app cerrada (opcional)
 
@@ -38,7 +39,13 @@ Con la app abierta los avisos funcionan siempre (incluso sin internet). Para rec
 
 ### 3. IA (opcional)
 
-**Panel de control → IA**: pega una clave de API de Claude (<https://platform.claude.com/settings/keys>). Se guarda solo en ese dispositivo. Modelo predeterminado: Claude Opus 5.5 (puedes elegir Sonnet 5.5 o Haiku 5.5, más económicos). Si el modelo declina una solicitud, se reintenta automáticamente con otro modelo (*server-side fallback*).
+Recomendado: guarda la clave de Claude **en tu Supabase**, no en tus dispositivos.
+
+1. **Edge Functions → Deploy a new function → Via editor**: nómbrala `claude-proxy`, pega [`supabase/functions/claude-proxy/index.ts`](supabase/functions/claude-proxy/index.ts) y despliega; desactiva «Verify JWT» (la función verifica tu sesión).
+2. **Edge Functions → Secrets**: `ANTHROPIC_API_KEY` (de <https://platform.claude.com/settings/keys>) y `OWNER_EMAIL` (tu correo de FloppyOS). Solo esa cuenta puede usar la IA.
+3. **Panel de control → IA → En tu Supabase → Activar**.
+
+(También existe el modo «en este dispositivo», más simple pero menos seguro.) Modelo predeterminado: Claude Opus 5.5 (puedes elegir Sonnet 5.5 o Haiku 5.5, más económicos). Si el modelo declina una solicitud, se reintenta automáticamente con otro modelo (*server-side fallback*).
 
 ### 4. Publicación (GitHub Pages)
 
@@ -67,6 +74,14 @@ Abre la dirección en **Chrome** → menú ⋮ → **Instalar app**. Queda con s
 | Panel de control | Temas, fondos, gatito (color, ojos, nombre), avisos, IA, sincronización, respaldo |
 
 **Bibliografía:** verifica referencias en Open Library y Crossref, distingue *confirmada / probable / no encontrada / sin verificar*, nunca inventa datos y guarda de dónde salió cada uno.
+
+## Seguridad
+
+- El repositorio no contiene datos, contraseñas ni claves (revisado en todo el historial). Clonarlo solo da el código: una copia arranca vacía y no puede entrar a tu Supabase sin tu correo y contraseña.
+- Tus datos en Supabase están protegidos por seguridad por filas: solo tu sesión puede leerlos o escribirlos; las llamadas anónimas están revocadas (`supabase/security.sql`).
+- Las claves secretas (Claude, VAPID, cron) viven como *secrets* de Supabase o en archivos locales ignorados por git (`*.local.txt`).
+- La app publicada tiene una política de seguridad de contenido: solo puede conectarse a Supabase, Claude, Open Library y Crossref, y no puede cargarse dentro de otras páginas.
+- PIN de bloqueo opcional por dispositivo (desactivado por defecto).
 
 ## Sin internet
 
