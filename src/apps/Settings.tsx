@@ -57,9 +57,12 @@ const THEMES: { id: ThemeId; name: string; colors: string[] }[] = [
   { id: 'clasico', name: 'Papel 2000', colors: ['#bfb4a5', '#5f7884', '#a3b5b8', '#d6cdbf'] },
 ];
 
+const TITLE_PRESETS = ['#000080', '#c2185b', '#7a5fd0', '#d9468f', '#e0712c', '#2e9d5b', '#239a8a', '#2f86bf', '#b0840c', '#5d5a8a', '#3a332d'];
+
 function Look() {
   const [theme, setTheme] = useSetting<ThemeId>('theme', 'lavanda');
   const [colorTitles, setColorTitles] = useSetting('colorTitles', true);
+  const [titleColor, setTitleColor] = useSetting<string | null>('titleColor', null);
   const [dots, setDots] = useSetting('desktopDots', true);
   const [assistant, setAssistant] = useSetting<AssistantId | 'rover' | 'none'>('assistant', 'cat');
   const cat = useCat();
@@ -86,7 +89,24 @@ function Look() {
           </button>
         ))}
       </div>
-      <label className="check"><input type="checkbox" checked={colorTitles} onChange={(e) => setColorTitles(e.target.checked)} /> Barras de título de colores (cada app con su color)</label>
+      <h3>Barras de título</h3>
+      <div className="assistant-pick">
+        <button className={`theme-card ${!colorTitles && !titleColor ? 'on' : ''}`} onClick={() => { setColorTitles(false); setTitleColor(null); }}>Del tema</button>
+        <button className={`theme-card ${colorTitles ? 'on' : ''}`} onClick={() => setColorTitles(true)}>Un color por app</button>
+        <button className={`theme-card ${!colorTitles && titleColor ? 'on' : ''}`} onClick={() => { setColorTitles(false); setTitleColor(titleColor ?? '#c2185b'); }}>Mi color</button>
+      </div>
+      {!colorTitles && titleColor && (
+        <div className="fur-swatches title-swatches">
+          {TITLE_PRESETS.map((c) => (
+            <button key={c} className={`fur ${titleColor === c ? 'on' : ''}`} style={{ background: `linear-gradient(90deg, ${c}, color-mix(in srgb, ${c} 45%, white))` }} aria-label={`Color ${c}`} onClick={() => setTitleColor(c)} />
+          ))}
+          <label className={`fur custom ${!TITLE_PRESETS.includes(titleColor) ? 'on' : ''}`} title="Elegir cualquier color">
+            <input type="color" value={titleColor} onChange={(e) => setTitleColor(e.target.value)} aria-label="Color personalizado" />
+            🎨
+          </label>
+          <span className="title-preview" style={{ background: `linear-gradient(90deg, ${titleColor}, color-mix(in srgb, ${titleColor} 45%, white))` }}>Panel de control</span>
+        </div>
+      )}
 
       <h3>Fondo de escritorio</h3>
       <p className="hint">El fondo se guarda solo en este dispositivo: puedes tener uno en la PC y otro en la tablet.</p>

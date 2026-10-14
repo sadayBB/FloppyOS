@@ -22,6 +22,7 @@ function Desktop() {
   const [selected, setSelected] = useState<AppId | null>(null);
   const [assistant, setAssistant] = useSetting<AssistantId | 'rover' | 'none'>('assistant', 'cat');
   const [theme] = useSetting<ThemeId>('theme', 'lavanda');
+  const [titleColor] = useSetting<string | null>('titleColor', null);
   const [dots] = useSetting('desktopDots', true);
   const wallpaper = useWallpaperCss();
   useReminderEngine();
@@ -36,11 +37,20 @@ function Desktop() {
   }, []);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
+    const root = document.documentElement;
+    root.dataset.theme = theme;
+    // Custom title bar colour overrides the theme's gradient (per-app tints still win when enabled).
+    if (titleColor) {
+      root.style.setProperty('--title-a', titleColor);
+      root.style.setProperty('--title-b', `color-mix(in srgb, ${titleColor} 45%, white)`);
+    } else {
+      root.style.removeProperty('--title-a');
+      root.style.removeProperty('--title-b');
+    }
     const meta = document.querySelector('meta[name="theme-color"]');
-    const color = getComputedStyle(document.documentElement).getPropertyValue('--title-a').trim();
+    const color = titleColor ?? getComputedStyle(root).getPropertyValue('--title-a').trim();
     if (meta && color) meta.setAttribute('content', color);
-  }, [theme]);
+  }, [theme, titleColor]);
 
   const iconDown = (id: AppId) => (e: RPointerEvent) => {
     setSelected(id);
