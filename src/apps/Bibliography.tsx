@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { create, patch, remove, useRows, type ID, type Reference, type RefKind, type RefStatus, type Subject } from '../db';
-import { parseReference, referenceLinks, verifyReference, VERIFY_LABEL, type Candidate } from '../lib/biblio';
+import { parseReference, referenceLinks, splitReferences, verifyReference, VERIFY_LABEL, type Candidate } from '../lib/biblio';
 import { Btn, Chip, Empty, Field, LazyInput, Modal } from '../os/ui';
 import { safeUrl } from '../lib/safeUrl';
 
 const KIND: Record<RefKind, string> = { obligatoria: 'Obligatoria', complementaria: 'Complementaria', recomendada: 'Recomendada por el profe' };
 const STATUS: Record<RefStatus, string> = { por_conseguir: 'Por conseguir', disponible: 'Ya la tengo', leyendo: 'Leyendo', terminada: 'Terminada' };
 
-export async function addReference(subjectId: ID | undefined, raw: string, origin: Reference['source']['origin'] = 'manual') {
+export async function addReference(subjectId: ID | undefined, raw: string, origin: Reference['source']['origin'] = 'manual', kind: RefKind = 'obligatoria') {
   const p = parseReference(raw);
   return create('refs', {
     subjectId,
@@ -21,7 +21,7 @@ export async function addReference(subjectId: ID | undefined, raw: string, origi
     doi: p.doi,
     url: p.url,
     raw,
-    kind: 'obligatoria',
+    kind,
     status: 'por_conseguir',
     verify: 'no_verificada',
     source: { origin, detail: origin === 'temario' ? 'Detectada al importar el temario' : 'Escrita por ti' },
@@ -38,6 +38,25 @@ export function Bibliography({ subject }: { subject: Subject }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [review, setReview] = useState<{ ref: Reference; cand: Candidate | null } | null>(null);
+
+  const addMany = async () => {
+    const items = splitReferences(raw);
+    setRaw('');
+    for (const it of items) await addReference(subject.id, it.raw, 'manual', it.kind);
+    if (items.length > 1) setMsg(`Agregué ${items.length} referencias. Revisa que se hayan separado bien y luego pulsa «Verificar pendientes».`);
+  };
+
+  /** Re-runs the parser on the original text of references that aren't confirmed yet. */
+  const reparse = async () => {
+    let n = 0;
+    for (const r of refs) {
+      if (!r.raw || r.verify === 'confirmada') continue;
+      const p = parseReference(r.raw);
+      await patch('refs', r.id, { title: p.title ?? r.title, authors: p.authors, year: p.year, edition: p.edition, publisher: p.publisher, isbn: p.isbn ?? r.isbn, doi: p.doi ?? r.doi, verify: 'no_verificada' });
+      n++;
+    }
+    setMsg(`Volví a leer ${n} referencia${n === 1 ? '' : 's'}. Ahora pulsa «Verificar pendientes».`);
+  };
 
   const verifyAll = async () => {
     setMsg(null);
@@ -75,12 +94,13 @@ export function Bibliography({ subject }: { subject: Subject }) {
 
   return (
     <div className="biblio">
-      <form className="capture" onSubmit={(e) => { e.preventDefault(); if (raw.trim()) { void addReference(subject.id, raw.trim()); setRaw(''); } }}>
-        <input className="input" value={raw} onChange={(e) => setRaw(e.target.value)} placeholder="Pega una referencia: Tanenbaum, A. (2011). Redes de computadoras, 5ª ed. Pearson." aria-label="Nueva referencia" />
-        <Btn type="submit">Agregar</Btn>
+      <form className="capture biblio-add" onSubmit={(e) => { e.preventDefault(); void addMany(); }}>
+        <textarea className="input" rows={raw.includes('\n') ? 6 : 2} value={raw} onChange={(e) => setRaw(e.target.value)} placeholder={'Pega una o varias referencias (puedes copiar la lista completa del programa, con «Básica:» y «Consulta:»).\nEj.: An introduction to genetic algorithm, Mitchel, M., MIT Press, 2006.'} aria-label="Nuevas referencias" />
+        <Btn type="submit" disabled={!raw.trim()}>Agregar</Btn>
       </form>
       <div className="toolbar">
         <Btn small disabled={!!busy || !refs.length} onClick={() => void verifyAll()}>Verificar pendientes</Btn>
+        <Btn small disabled={!!busy || !refs.some((r) => r.raw && r.verify !== 'confirmada')} title="Vuelve a separar título, autor, editorial y año a partir del texto original" onClick={() => void reparse()}>Volver a leer</Btn>
         {busy && busy.startsWith('Verif') && <span className="hint">{busy}</span>}
         <span className="grow" />
         <span className="hint">Fuentes: Open Library y Crossref (requiere internet)</span>

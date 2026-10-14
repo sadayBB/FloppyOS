@@ -7,6 +7,7 @@ import { pdfToText } from '../lib/pdf';
 import { AiBadge, AiButton, useAiAction } from '../os/Ai';
 import { structureSyllabus } from '../lib/aiFeatures';
 import { addReference } from './Bibliography';
+import { splitReferences } from '../lib/biblio';
 
 interface Draft {
   title: string;
@@ -14,6 +15,8 @@ interface Draft {
   include: boolean;
   flag?: string;
   biblio?: boolean;
+  /** Original line, kept so references can be rebuilt exactly. */
+  raw?: string;
 }
 
 /** Turns pasted syllabus text into a draft hierarchy. Uncertain lines are flagged, never silently dropped. */
@@ -57,7 +60,7 @@ export function parseSyllabus(text: string): Draft[] {
     else if (line.length > 140) flag = 'Línea muy larga: ¿es un tema o una descripción?';
     else if (/\b\d{1,2}[/-]\d{1,2}([/-]\d{2,4})?\b|\bsemana\s+\d+/i.test(line)) flag = 'Contiene una fecha o semana';
 
-    out.push({ title: line, depth, include: !looksBiblio, flag, biblio: looksBiblio });
+    out.push({ title: line, depth, include: !looksBiblio, flag, biblio: looksBiblio, raw: raw.trim() });
     prevDepth = depth;
   }
   return out;
@@ -192,7 +195,8 @@ function ImportModal({ subject, onClose }: { subject: Subject; onClose: () => vo
       stack.push(t.id);
     }
     const refs = drafts.filter((x) => x.biblio && !x.include);
-    if (saveBiblio) for (const r of refs) await addReference(subject.id, r.title, 'temario');
+    // Wrapped lines and «Básica / Consulta» headers are rebuilt into whole references.
+    if (saveBiblio) for (const r of splitReferences(refs.map((x) => x.raw ?? x.title).join('\n'))) await addReference(subject.id, r.raw, 'temario', r.kind);
     onClose();
   };
 

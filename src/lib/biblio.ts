@@ -1,18 +1,98 @@
 import type { Reference, RefVerify } from '../db';
 import { norm } from './parse';
 
+const EDITION = /\(?\s*(\d+\s*(?:ª|º|a|st|nd|rd|th)?\.?\s*(?:ed\.?|edici[oó]n|edition))\s*\)?/i;
+// "Apellido, I." / "Apellido, I. J." / "De la Cruz, M." — the way syllabi list authors.
+const AUTHOR = /[A-ZÁÉÍÓÚÜÑÄÖ][\p{L}'’-]+(?:\s(?:de|del|la|van|von|der)\s[\p{L}'’-]+)*(?:\s[A-ZÁÉÍÓÚÜÑÄÖ][\p{L}'’-]+)?,\s(?:[A-ZÁÉÍÓÚÜÑÄÖ]\.\s?){1,3}/uy;
+const AUTHOR_SEP = /,?\s*(?:&|y|and|e)?\s*/y;
+
+/**
+ * "Título (2nd ed.), Apellido, I., Apellido2, J., & Apellido3, K., Editorial, Año."
+ * The common format in Mexican university syllabi (TIPO, TÍTULO, AUTOR, EDITORIAL Y AÑO).
+ */
+function parseTitleFirst(rest: string): Partial<Reference> | null {
+  for (let start = rest.indexOf(', '); start !== -1; start = rest.indexOf(', ', start + 1)) {
+    let pos = start + 2;
+    AUTHOR.lastIndex = pos;
+    const first = AUTHOR.exec(rest);
+    if (!first) continue;
+    const names = [first[0].trim()];
+    pos = AUTHOR.lastIndex;
+    for (;;) {
+      AUTHOR_SEP.lastIndex = pos;
+      const sep = AUTHOR_SEP.exec(rest);
+      const next = sep ? sep.index + sep[0].length : pos;
+      AUTHOR.lastIndex = next;
+      const m = AUTHOR.exec(rest);
+      if (!m) break;
+      names.push(m[0].trim());
+      pos = AUTHOR.lastIndex;
+    }
+    const title = rest.slice(0, start).trim();
+    if (title.length < 3) return null;
+    const publisher = rest.slice(pos).replace(/^[\s,;:&]+/, '').replace(/[\s,.;]+$/, '');
+    return { title, authors: names.map((n) => n.replace(/[\s,]+$/, '')).join('; '), publisher: publisher || undefined };
+  }
+  return null;
+}
+
 /** Best-effort split of a citation line. Missing parts stay empty — nothing is invented. */
 export function parseReference(raw: string): Partial<Reference> {
-  const line = raw.trim().replace(/^[-•*\d.)\s]+(?=\D)/, '');
-  const out: Partial<Reference> = { raw: line };
-  const isbn = line.match(/ISBN(?:-1[03])?[:\s]*([\dXx][\dXx\s-]{8,16}[\dXx])/i);
-  if (isbn) out.isbn = isbn[1].replace(/[\s-]/g, '').toUpperCase();
-  const doi = line.match(/\b(10\.\d{4,9}\/[^\s"<>]+[^\s"<>.,;])/);
-  if (doi) out.doi = doi[1];
-  const url = line.match(/https?:\/\/\S+/);
-  if (url && !doi) out.url = url[0];
-  let rest = line.replace(/ISBN(?:-1[03])?[:\s]*[\dXx][\dXx\s-]{8,16}[\dXx]/i, '').replace(/https?:\/\/\S+/, '').replace(/doi:\s*\S+/i, '').trim();
+  const line = raw.replace(/\s+/g, ' ').trim().replace(/^(?:\d+[.)]|[-•*·])\s*/, '');
+  const ref = parseIds(line);
+  let rest = ref.rest;
+  const out: Partial<Reference> = { raw: line, isbn: ref.isbn, doi: ref.doi, url: ref.url };
 
+  const year = rest.match(/,?\s*\(?\b(1[89]\d{2}|20\d{2})\b\)?\.?\s*$/);
+  const tf = parseTitleFirst(year ? rest.slice(0, year.index) : rest);
+  if (tf) {
+    const ed = tf.title!.match(EDITION);
+    return {
+      ...out,
+      ...tf,
+      title: ed ? tf.title!.replace(ed[0], '').replace(/\s{2,}/g, ' ').replace(/[\s,]+$/, '') : tf.title,
+      edition: ed?.[1].trim(),
+      year: year?.[1],
+    };
+  }
+  return parseClassic(rest, out, line);
+}
+
+function parseIds(line: string) {
+  const isbn = line.match(/ISBN(?:-1[03])?[:\s]*([\dXx][\dXx\s-]{8,16}[\dXx])/i);
+  const doi = line.match(/\b(10\.\d{4,9}\/[^\s"<>]+[^\s"<>.,;])/);
+  const url = line.match(/https?:\/\/\S+/);
+  const rest = line.replace(/ISBN(?:-1[03])?[:\s]*[\dXx][\dXx\s-]{8,16}[\dXx]/i, '').replace(/https?:\/\/\S+/, '').replace(/doi:\s*\S+/i, '').replace(/\s{2,}/g, ' ').trim();
+  return { isbn: isbn?.[1].replace(/[\s-]/g, '').toUpperCase(), doi: doi?.[1], url: url && !doi ? url[0] : undefined, rest };
+}
+
+/**
+ * Splits a pasted bibliography block into references: numbered/bulleted items start a new one,
+ * wrapped lines are joined back, and «Básica / Consulta» headers set the kind.
+ */
+export function splitReferences(text: string): { raw: string; kind: Reference['kind'] }[] {
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const numbered = lines.some((l) => /^(\d+[.)]|[-•*·])\s+/.test(l));
+  let kind: Reference['kind'] = 'obligatoria';
+  const out: { raw: string; kind: Reference['kind'] }[] = [];
+  for (const l of lines) {
+    const header = l.match(/^(b[aá]sica|obligatoria|principal|consulta|complementaria|recomendada|adicional)s?\s*:?$/i);
+    if (header) {
+      kind = /^(b[aá]sica|obligatoria|principal)/i.test(header[1]) ? 'obligatoria' : /recomendada/i.test(header[1]) ? 'recomendada' : 'complementaria';
+      continue;
+    }
+    if (/^bibliograf[ií]a/i.test(l)) continue;
+    if (!numbered || /^(\d+[.)]|[-•*·])\s+/.test(l) || !out.length) out.push({ raw: l, kind });
+    else {
+      const prev = out[out.length - 1];
+      // A word cut with a hyphen at the end of a PDF line is joined back ("Addison-" + "Wesley").
+      prev.raw = /[A-Za-zÀ-ÿ]-$/.test(prev.raw) ? prev.raw + l : `${prev.raw} ${l}`;
+    }
+  }
+  return out;
+}
+
+function parseClassic(rest: string, out: Partial<Reference>, line: string): Partial<Reference> {
   // APA-like: Autor, A. (2011). Título. Editorial.
   const apa = rest.match(/^(.+?)\s*\((\d{4})[a-z]?\)\.?\s*(.+)$/);
   if (apa) {
@@ -29,10 +109,10 @@ export function parseReference(raw: string): Partial<Reference> {
       rest = m[2];
     }
   }
-  const ed = rest.match(/,?\s*\(?(\d+\s*[ªºa]?\.?\s*(?:ed\.?|edici[oó]n))\)?/i);
+  const ed = rest.match(new RegExp(`,?\s*${EDITION.source}`, 'i'));
   if (ed) {
     out.edition = ed[1].trim();
-    rest = rest.replace(ed[0], '');
+    rest = rest.replace(ed[0], '. ');
   }
   const parts = rest.split(/\.\s+/).map((p) => p.trim().replace(/\.$/, '')).filter(Boolean);
   if (parts.length) out.title = parts[0].replace(/[,:;]\s*$/, '');
@@ -42,13 +122,44 @@ export function parseReference(raw: string): Partial<Reference> {
 }
 
 const tokens = (s: string) => new Set(norm(s).replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter((w) => w.length > 2));
+const STOP = new Set(['the', 'and', 'for', 'with', 'from', 'del', 'las', 'los', 'una', 'por', 'con', 'its', 'into']);
+/** One-letter typo distance (insert/delete/substitute), enough for «programing» vs «programming». */
+function oneEdit(a: string, b: string) {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0;
+  let j = 0;
+  let edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      i++;
+      j++;
+      continue;
+    }
+    if (++edits > 1) return false;
+    if (a.length > b.length) i++;
+    else if (b.length > a.length) j++;
+    else {
+      i++;
+      j++;
+    }
+  }
+  return edits + (a.length - i) + (b.length - j) <= 1;
+}
+/** Words match if equal, plural/singular, one a prefix of the other (program/programming), or one typo apart. */
+function wordsMatch(x: string, y: string) {
+  if (x === y) return true;
+  const sx = x.replace(/(es|s)$/, '');
+  const sy = y.replace(/(es|s)$/, '');
+  if (sx === sy) return true;
+  if (Math.min(x.length, y.length) >= 5 && (x.startsWith(y) || y.startsWith(x))) return true;
+  return Math.min(x.length, y.length) >= 6 && oneEdit(x, y);
+}
 export function similarity(a: string, b: string) {
-  const A = tokens(a);
-  const B = tokens(b);
-  if (!A.size || !B.size) return 0;
-  let inter = 0;
-  A.forEach((t) => B.has(t) && inter++);
-  return inter / Math.min(A.size, B.size);
+  const A = [...tokens(a)].filter((t) => !STOP.has(t));
+  const B = [...tokens(b)].filter((t) => !STOP.has(t));
+  if (!A.length || !B.length) return 0;
+  const inter = A.filter((t) => B.some((u) => wordsMatch(t, u))).length;
+  return inter / Math.min(A.length, B.length);
 }
 const surnames = (authors?: string) => [...tokens(authors ?? '')].filter((w) => w.length > 3);
 
@@ -70,7 +181,8 @@ function judge(ref: Partial<Reference>, c: Omit<Candidate, 'verdict' | 'why'>, e
   if (exactId) return { ...c, verdict: 'confirmada', why: ref.doi ? 'El DOI existe en Crossref.' : 'El ISBN existe en Open Library.' };
   const sim = similarity(ref.title ?? '', c.title);
   const sn = surnames(ref.authors);
-  const authorOk = !sn.length || sn.some((s) => norm(c.authors ?? '').includes(s));
+  const found = [...tokens(c.authors ?? '')];
+  const authorOk = !sn.length || sn.some((s) => found.some((f) => wordsMatch(s, f)));
   const yearOk = !ref.year || !c.year || ref.year === c.year;
   if (sim >= 0.85 && authorOk && sn.length) return { ...c, verdict: 'confirmada', why: `Título y autor coinciden${yearOk ? '' : ' (el año difiere: puede ser otra edición)'}.` };
   if (sim >= 0.5) return { ...c, verdict: 'probable', why: `Título parecido (${Math.round(sim * 100)}%)${authorOk ? '' : ', pero el autor no coincide'}. Revísalo.` };
@@ -85,10 +197,30 @@ async function getJSON(url: string) {
 
 async function openLibrary(ref: Partial<Reference>): Promise<Candidate | null> {
   const fields = 'key,title,author_name,first_publish_year,isbn,publisher,ebook_access,ia';
-  const q = ref.isbn ? `isbn=${encodeURIComponent(ref.isbn)}` : `title=${encodeURIComponent(ref.title ?? '')}${ref.authors ? `&author=${encodeURIComponent(surnames(ref.authors)[0] ?? '')}` : ''}`;
-  const data = await getJSON(`https://openlibrary.org/search.json?${q}&fields=${fields}&limit=3`);
-  const d = data.docs?.[0];
-  if (!d) return null;
+  const author = surnames(ref.authors)[0];
+  const title = ref.title ?? '';
+  const short = title.split(/[:;(]/)[0].split(/\s+/).slice(0, 8).join(' ');
+  const enc = encodeURIComponent;
+  // Most precise first; syllabi often abbreviate or reorder titles, so fall back to looser queries.
+  const queries = ref.isbn
+    ? [`isbn=${enc(ref.isbn)}`]
+    : [
+        `title=${enc(title)}${author ? `&author=${enc(author)}` : ''}`,
+        ...(short !== title ? [`title=${enc(short)}${author ? `&author=${enc(author)}` : ''}`] : []),
+        // The author may be misspelled in the syllabus («Mitchel»): try the title alone.
+        ...(author ? [`title=${enc(short)}`] : []),
+        `q=${enc(short)}`,
+      ];
+  let docs: { title: string; author_name?: string[]; first_publish_year?: number; publisher?: string[]; isbn?: string[]; key: string; ebook_access?: string; ia?: string[] }[] = [];
+  for (const q of queries) {
+    const data = await getJSON(`https://openlibrary.org/search.json?${q}&fields=${fields}&limit=5`);
+    docs = data.docs ?? [];
+    if (docs.length) break;
+  }
+  if (!docs.length) return null;
+  // Prefer the result whose title and author best match the reference.
+  const score = (x: (typeof docs)[number]) => similarity(title, x.title) + (author && [...tokens(x.author_name?.join(' ') ?? '')].some((t) => wordsMatch(author, t)) ? 0.5 : 0);
+  const d = [...docs].sort((a, b) => score(b) - score(a))[0];
   return judge(ref, {
     origin: 'openlibrary',
     title: d.title,

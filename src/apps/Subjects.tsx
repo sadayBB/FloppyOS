@@ -7,10 +7,10 @@ import { Btn, Chip, Dot, Empty, Field, Input, LazyInput, Modal, Select, Tabs } f
 import { useWM } from '../os/wm';
 import { Pixel } from '../pixel/Pixel';
 import { STICKERS, stickerById } from '../pixel/stickers';
-import { useUnlocked } from '../lib/stickers';
+import { StickerView, useCustom, useUnlocked } from '../lib/stickers';
 import { Syllabus } from './Syllabus';
 import { toggleDone } from './Tasks';
-import { SubjectIcon } from './SubjectIcon';
+import { stickerToIcon, SubjectIcon } from './SubjectIcon';
 import { GradesTab } from './Grades';
 import { Bibliography } from './Bibliography';
 
@@ -163,7 +163,7 @@ function SubjectInfo({ s, onDeleted }: { s: Subject; onDeleted: () => void }) {
         </div>
       </Field>
       <Field label="Sticker de la materia" wide>
-        <StickerPicker value={s.icon} onChange={(icon) => set({ icon })} />
+        <StickerPicker s={s} onChange={set} />
       </Field>
       <Field label="Descripción" wide><LazyInput multiline value={s.description ?? ''} onCommit={(v) => set({ description: v })} /></Field>
       <div className="wide">
@@ -284,17 +284,34 @@ function SubjectNotes({ s }: { s: Subject }) {
   );
 }
 
-function StickerPicker({ value, onChange }: { value?: string; onChange: (id: string | undefined) => void }) {
+function StickerPicker({ s, onChange }: { s: Subject; onChange: (c: Partial<Subject>) => void }) {
   const unlocked = useUnlocked();
+  const [custom] = useCustom();
+  const [busy, setBusy] = useState(false);
+  const none = !s.icon && !s.iconImage;
+  const pickCustom = async (blob: Blob) => {
+    setBusy(true);
+    try {
+      onChange({ icon: undefined, iconImage: await stickerToIcon(blob) });
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <div className="sticker-picker">
-      <button className={`swatch-sticker ${!value ? 'on' : ''}`} onClick={() => onChange(undefined)} aria-label="Sin sticker">∅</button>
+      <button className={`swatch-sticker ${none ? 'on' : ''}`} onClick={() => onChange({ icon: undefined, iconImage: undefined })} aria-label="Sin sticker">∅</button>
       {STICKERS.filter((x) => unlocked.has(x.id)).map((x) => (
-        <button key={x.id} className={`swatch-sticker ${value === x.id ? 'on' : ''}`} onClick={() => onChange(x.id)} title={x.name}>
+        <button key={x.id} className={`swatch-sticker ${s.icon === x.id && !s.iconImage ? 'on' : ''}`} onClick={() => onChange({ icon: x.id, iconImage: undefined })} title={x.name}>
           <Pixel sprite={x.rows} scale={2} />
         </button>
       ))}
-      <span className="hint">Desbloquea más en el álbum de Stickers.</span>
+      {custom.map((c) => (
+        <button key={c.id} className="swatch-sticker" disabled={busy} onClick={() => void pickCustom(c.blob)} title={`${c.name} (tuyo)`}>
+          <StickerView sid={`custom:${c.id}`} size={34} custom={custom} />
+        </button>
+      ))}
+      {s.iconImage && <span className="swatch-sticker on" title="Sticker propio elegido"><img src={s.iconImage} alt="" width={34} height={34} style={{ imageRendering: 'pixelated' }} /></span>}
+      <span className="hint">{custom.length ? 'Incluye tus stickers subidos.' : 'Sube tus propios stickers en el álbum de Stickers.'}</span>
     </div>
   );
 }

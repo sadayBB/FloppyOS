@@ -30,6 +30,8 @@ export interface Subject extends Base {
   description?: string;
   color: string;
   icon?: string; // sticker id
+  /** Small PNG data URL from one of the user's own stickers (synced, unlike the original image). */
+  iconImage?: string;
   grading?: GradingScheme;
 }
 
