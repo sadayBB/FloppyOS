@@ -11,8 +11,9 @@ import type { AssistantId } from '../os/Assistant';
 import { Pixel } from '../pixel/Pixel';
 import { CatSprite, EYES, FURS, useCat, type CatLook } from '../pixel/cat';
 import { Btn, Field, Input, Select, Tabs } from '../os/ui';
+import { AI_MODELS, getAiConfig, setAiConfig, testAi, type AiModel } from '../lib/ai';
 
-type Tab = 'general' | 'look' | 'sync' | 'alerts' | 'backup' | 'about';
+type Tab = 'general' | 'look' | 'sync' | 'alerts' | 'ai' | 'backup' | 'about';
 
 export default function Settings({ tab: initTab }: { tab?: Tab }) {
   const [tab, setTab] = useState<Tab>(initTab ?? 'look');
@@ -25,6 +26,7 @@ export default function Settings({ tab: initTab }: { tab?: Tab }) {
           { id: 'look', label: 'Apariencia' },
           { id: 'general', label: 'Estudio' },
           { id: 'alerts', label: 'Avisos' },
+          { id: 'ai', label: 'IA' },
           { id: 'sync', label: 'Sincronización' },
           { id: 'backup', label: 'Respaldo' },
           { id: 'about', label: 'Acerca de' },
@@ -35,6 +37,7 @@ export default function Settings({ tab: initTab }: { tab?: Tab }) {
         {tab === 'general' && <General />}
         {tab === 'sync' && <Sync />}
         {tab === 'alerts' && <Alerts />}
+        {tab === 'ai' && <AiSettings />}
         {tab === 'backup' && <Backup />}
         {tab === 'about' && <About />}
       </div>
@@ -272,6 +275,60 @@ function Sync() {
           <p className="hint">Se sincroniza sola: al hacer cambios, al volver a la app, al recuperar internet y cada 2 minutos. Sin internet todo sigue funcionando y se guarda en este dispositivo.</p>
         </>
       )}
+      {msg && <p className="notice">{msg}</p>}
+    </div>
+  );
+}
+
+function AiSettings() {
+  const cfg = getAiConfig();
+  const [key, setKey] = useState('');
+  const [model, setModel] = useState<AiModel>(cfg?.model ?? 'claude-opus-5-5');
+  const [msg, setMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [, force] = useState(0);
+  const save = (apiKey: string) => {
+    setAiConfig({ apiKey, model });
+    force((n) => n + 1);
+  };
+  const test = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      setMsg(`✓ ${await testAi()}`);
+    } catch (e) {
+      setMsg(`⚠ ${(e as Error).message}`);
+    }
+    setBusy(false);
+  };
+  return (
+    <div className="prose">
+      <h3>Inteligencia artificial (Claude)</h3>
+      <p>Las funciones con ✨ usan Claude, de Anthropic: interpretar notas rápidas, dividir tareas en pasos, crear tarjetas desde tus apuntes, resumir clases, ordenar temarios difíciles y responder preguntas sobre tu semestre.</p>
+      <ul className="steps">
+        <li>Crea una clave en <a href="https://platform.claude.com/settings/keys" target="_blank" rel="noreferrer">platform.claude.com → API Keys</a> (requiere saldo; cada uso cuesta centavos).</li>
+        <li>Se guarda <b>solo en este dispositivo</b>: no se sincroniza ni se sube a GitHub. En la tablet tendrás que pegarla también.</li>
+        <li>Solo se envía información a Claude cuando tocas un botón ✨, y nada se guarda sin que lo revises.</li>
+      </ul>
+      {cfg ? (
+        <p className="notice">✓ Clave configurada (…{cfg.apiKey.slice(-4)})</p>
+      ) : (
+        <div className="form">
+          <Field label="Clave de API" wide><Input type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value.trim())} placeholder="sk-ant-…" /></Field>
+        </div>
+      )}
+      <div className="form">
+        <Field label="Modelo" wide>
+          <Select value={model} onChange={(e) => { const m = e.target.value as AiModel; setModel(m); if (cfg) setAiConfig({ ...cfg, model: m }); }}>
+            {AI_MODELS.map((m) => <option key={m.id} value={m.id}>{m.name} — {m.note}</option>)}
+          </Select>
+        </Field>
+      </div>
+      <div className="row-btns">
+        {!cfg && <Btn primary disabled={!key.startsWith('sk-')} onClick={() => save(key)}>Guardar clave</Btn>}
+        {cfg && <Btn primary disabled={busy} onClick={() => void test()}>{busy ? 'Probando…' : 'Probar conexión'}</Btn>}
+        {cfg && <Btn onClick={() => { setAiConfig(null); setKey(''); force((n) => n + 1); }}>Quitar clave</Btn>}
+      </div>
       {msg && <p className="notice">{msg}</p>}
     </div>
   );

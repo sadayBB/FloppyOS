@@ -43,12 +43,16 @@ export function useUnlocked() {
   return new Set(STICKERS.filter((s) => s.unlocked(stats)).map((s) => s.id));
 }
 
+// Stable empty defaults: a fresh [] per render would re-trigger effects that depend on these lists.
+const NO_CUSTOM: CustomSticker[] = [];
+const NO_PLACED: PlacedSticker[] = [];
+
 export function useCustom(): [CustomSticker[], (v: CustomSticker[]) => Promise<void>] {
-  return useLocal<CustomSticker[]>('customStickers', []);
+  return useLocal<CustomSticker[]>('customStickers', NO_CUSTOM);
 }
 
 export function usePlaced(): [PlacedSticker[], (v: PlacedSticker[]) => Promise<void>] {
-  return useLocal<PlacedSticker[]>('desktopStickers', []);
+  return useLocal<PlacedSticker[]>('desktopStickers', NO_PLACED);
 }
 
 /** Appends a sticker reading the stored list at call time, so rapid taps don't overwrite each other. */

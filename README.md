@@ -14,51 +14,69 @@ npm run build      # genera dist/
 
 ### 1. Supabase (sincronización entre PC y tablet)
 
-1. Crea una cuenta gratis en <https://supabase.com> y un proyecto nuevo (región cercana, p. ej. *South America* o *US East*).
-2. En el proyecto: **SQL Editor → New query**, pega todo [`supabase/schema.sql`](supabase/schema.sql) y pulsa **Run**.
-3. **Authentication → Sign In / Providers → Email**: desactiva *Confirm email* (más cómodo para una sola persona) — o déjalo y confirma desde tu correo.
-4. **Project Settings → API**: copia *Project URL* y la clave *anon public*.
-5. En FloppyOS: **Panel de control → Sincronización**, pega ambos datos y pulsa **Crear cuenta** (solo la primera vez). En la tablet, usa **Iniciar sesión** con el mismo correo.
-6. Ya con tu cuenta creada, en **Authentication → Sign In / Providers** desactiva *Allow new users to sign up* para que nadie más pueda registrarse.
+1. Crea una cuenta gratis en <https://supabase.com> y un proyecto nuevo.
+2. **SQL Editor → New query**, pega todo [`supabase/schema.sql`](supabase/schema.sql) y pulsa **Run**.
+3. **Authentication → Sign In / Providers → Email**: desactiva *Confirm email* (más cómodo para una sola persona).
+4. Copia dos datos:
+   - **Dirección del proyecto**: la URL de tu navegador estando en el panel (`supabase.com/dashboard/project/<ID>`) — FloppyOS la entiende tal cual. También sirve la *Project URL* del botón **Connect**.
+   - **Publishable key** (`sb_publishable_…`) en **Project Settings → API Keys**. Nunca la *Secret key*.
+5. En FloppyOS: **Panel de control → Sincronización**, pega ambos y pulsa **Crear cuenta** (solo la primera vez). En la tablet, **Iniciar sesión** con el mismo correo.
+6. Después desactiva *Allow new users to sign up* en **Authentication** para que nadie más pueda registrarse.
 
-> La clave *anon* es pública por diseño; tus datos los protege la seguridad por filas (cada usuario solo ve sus filas).
-> Opcional: guarda URL y clave como *variables* del repositorio (`SUPABASE_URL`, `SUPABASE_ANON_KEY`) y la app publicada vendrá ya conectada.
+### 2. Recordatorios con la app cerrada (opcional)
 
-### 2. Publicación (GitHub Pages)
+Con la app abierta los avisos funcionan siempre (incluso sin internet). Para recibirlos con la app **cerrada**, Supabase los envía como notificaciones push:
 
-Cada `git push` a `main` compila y publica automáticamente (workflow en `.github/workflows/deploy.yml`). La dirección queda así: `https://<usuario>.github.io/FloppyOS/`.
+1. **SQL Editor**: ejecuta [`supabase/reminders.sql`](supabase/reminders.sql).
+2. **Edge Functions → Deploy a new function → Via editor**: nómbrala `send-reminders`, pega [`supabase/functions/send-reminders/index.ts`](supabase/functions/send-reminders/index.ts) y despliega. En los ajustes de la función, **desactiva «Verify JWT»** (se protege con su propio secreto).
+3. **Edge Functions → Secrets**: agrega
+   - `VAPID_PUBLIC_KEY` y `VAPID_PRIVATE_KEY`: cópialas del archivo local `supabase/.vapid-keys.local.txt` (no está en GitHub).
+   - `CRON_SECRET`: inventa una palabra larga.
+   - `VAPID_SUBJECT` (opcional): `mailto:tu-correo`.
+4. **SQL Editor**: abre [`supabase/reminders-cron.sql`](supabase/reminders-cron.sql), reemplaza `<<<ID-DEL-PROYECTO>>>` y `<<<CRON_SECRET>>>` y ejecútalo (corre cada minuto).
+5. En cada dispositivo: **Panel de control → Avisos → Activar avisos con la app cerrada**.
 
-### 3. Instalar en la tablet Android
+### 3. IA (opcional)
 
-Abre la dirección en **Chrome** → menú ⋮ → **Instalar app** (o *Agregar a pantalla principal*). Queda con su icono, abre a pantalla completa y funciona sin internet. Se actualiza sola cuando publicas una versión nueva.
+**Panel de control → IA**: pega una clave de API de Claude (<https://platform.claude.com/settings/keys>). Se guarda solo en ese dispositivo. Modelo predeterminado: Claude Opus 5.5 (puedes elegir Sonnet 5.5 o Haiku 5.5, más económicos). Si el modelo declina una solicitud, se reintenta automáticamente con otro modelo (*server-side fallback*).
 
-En la PC: Chrome/Edge → icono de instalar en la barra de direcciones.
+### 4. Publicación (GitHub Pages)
 
-## Sin internet
+Cada `git push` a `main` compila y publica en `https://sadaybb.github.io/FloppyOS/`.
 
-Todo vive en IndexedDB del dispositivo: tareas, agenda, temario, apuntes, pomodoro, stickers y fondos funcionan sin conexión. La sincronización sube y baja cambios cuando vuelve internet (al editar, al volver a la app, al reconectar y cada 2 minutos). Conflictos: gana la versión editada más recientemente; los borrados viajan como *tombstones*, así que nada se pierde en silencio.
+### 5. Instalar en la tablet Android
+
+Abre la dirección en **Chrome** → menú ⋮ → **Instalar app**. Queda con su icono, abre a pantalla completa, funciona sin internet y se actualiza sola.
 
 ## Qué incluye
 
 | App | Qué hace |
 | --- | --- |
-| Mi Semestre | Resumen del día, entregas próximas, carga estimada a 14 días, avisos |
-| Bandeja | Captura rápida que entiende `@materia #etiqueta ! mañana 2h`, clasificación y procesamiento en lote |
-| Tareas | Filtros, prioridad, estados, pasos, dependencias, tiempo real vs. estimado |
-| Agenda | Día/semana/mes con clases recurrentes, eventos, tareas, sesiones, conflictos |
-| Materias | Semestres, horario, temario jerárquico, importar temario desde texto, modo clase, sticker por materia |
-| Estudio | Pomodoro con objetivo, cierre de sesión, «la última vez…», estadísticas |
-| Apuntes | Editor con autoguardado vinculado a materia y tema |
-| Buscar | Búsqueda global (incluye semestres archivados) |
-| Stickers | Álbum pixel art que se desbloquea estudiando; pégalos en el escritorio o sube los tuyos |
-| Panel de control | Temas, fondos (presets o tu imagen), asistente (Clippy/Rover), sincronización, respaldo |
+| Mi Semestre | Resumen del día, entregas próximas, carga estimada, avisos |
+| Bandeja | Captura rápida (`@materia #etiqueta ! mañana 2h`), ✨ interpretación con IA, procesamiento en lote |
+| Tareas | Prioridad, estados, pasos (✨ sugeridos por IA), dependencias, repetición, recordatorios, proyecto |
+| Agenda | Día/semana/mes, clases recurrentes, eventos con avisos, conflictos |
+| Materias | Semestres, profesor/a, horario, temario (importar texto o **PDF**, ✨ IA), modo clase, **Calificación**, **Bibliografía** |
+| Calificaciones | Esquema UNISTMO (50% unidades + 50% ordinario) con ponderaciones del profe: cuánto vale cada actividad de la final, asegurado, proyección, «¿qué necesito?» |
+| Proyectos | Hitos, tablero por estado con responsables, checklist de entregables/rúbrica, enlaces, bitácora |
+| Tarjetas | Repetición espaciada, ✨ creadas desde apuntes, temas débiles |
+| Estudio | Pomodoro con objetivo, cierre de sesión, estadísticas |
+| Apuntes | Autoguardado, ✨ resumen y tarjetas |
+| Pregúntale | ✨ Chat que responde con tus propios datos |
+| Stickers | Álbum pixel art que se desbloquea estudiando, o sube los tuyos |
+| Panel de control | Temas, fondos, gatito (color, ojos, nombre), avisos, IA, sincronización, respaldo |
+
+**Bibliografía:** verifica referencias en Open Library y Crossref, distingue *confirmada / probable / no encontrada / sin verificar*, nunca inventa datos y guarda de dónde salió cada uno.
+
+## Sin internet
+
+Todo vive en IndexedDB del dispositivo. Sin conexión funcionan todos los módulos salvo los que por naturaleza necesitan red: sincronización, verificación de bibliografía e IA, que avisan cuando no están disponibles.
 
 ## Estructura
 
-- `src/db.ts` — esquema Dexie y helpers (`create`, `patch`, `remove`, `useRows`, `useLocal`).
-- `src/lib/sync.ts` — sincronización offline-first con Supabase.
-- `src/os/` — escritorio: ventanas, barra de tareas, asistente, stickers del escritorio.
-- `src/apps/` — cada aplicación; `meta.ts` (iconos, tamaños, colores) y `registry.tsx`.
-- `src/lib/` — fechas, parser de captura, temporizador, avisos, respaldo, fondos, stickers.
-- `src/pixel/` — sprites en cuadrícula de caracteres (iconos, Clippy, Rover, stickers).
-- `supabase/schema.sql` — tabla y función de sincronización.
+- `src/db.ts` — esquema Dexie y helpers.
+- `src/lib/` — sync, grades, biblio, pdf, reminders, ai/aiFeatures, parser, fechas, temporizador.
+- `src/apps/` — cada aplicación; `meta.ts` y `registry.tsx`.
+- `src/os/` — escritorio, ventanas, asistente, stickers, controles.
+- `src/pixel/` — sprites; el gatito se genera con `scripts/cat.py`.
+- `supabase/` — SQL de sincronización y recordatorios, Edge Function `send-reminders`.

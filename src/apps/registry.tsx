@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
 import type { AppId } from './meta';
+import Ask from './Ask';
 import Calendar from './Calendar';
 import Cards from './Cards';
 import Grades from './Grades';
@@ -29,4 +30,5 @@ export const APP_COMPONENTS: Record<AppId, ComponentType<any>> = {
   grades: Grades,
   projects: Projects,
   cards: Cards,
+  ask: Ask,
 };

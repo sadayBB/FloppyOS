@@ -6,6 +6,8 @@ import { parseCapture } from '../lib/parse';
 import { Btn, Chip, Dot, Empty, Field, Input, LazyInput, Progress, Select, SubjectSelect } from '../os/ui';
 import { useWM } from '../os/wm';
 import { ReminderPicker } from '../os/ReminderPicker';
+import { AiBadge, AiButton, useAiAction } from '../os/Ai';
+import { suggestSubtasks } from '../lib/aiFeatures';
 
 type Filter = 'today' | 'week' | 'overdue' | 'nodate' | 'open' | 'done';
 const FILTERS: { id: Filter; label: string }[] = [
@@ -137,6 +139,8 @@ function TaskDetail({ task: t, tasks, onClose }: { task: Task; tasks: Task[]; on
   const projects = useRows('projects');
   const wm = useWM();
   const [step, setStep] = useState('');
+  const ai = useAiAction<{ pasos: string[]; explicacion: string }>();
+  const [picked, setPicked] = useState<Set<number>>(new Set());
   const set = (c: Partial<Task>) => void patch('tasks', t.id, c);
   const dep = tasks.find((x) => x.id === t.dependsOn);
   const doneSteps = t.subtasks.filter((s) => s.done).length;
@@ -221,7 +225,28 @@ function TaskDetail({ task: t, tasks, onClose }: { task: Task; tasks: Task[]; on
           <form className="capture" onSubmit={(e) => { e.preventDefault(); if (step.trim()) { set({ subtasks: [...t.subtasks, { id: newId(), title: step.trim(), done: false }] }); setStep(''); } }}>
             <input className="input" value={step} onChange={(e) => setStep(e.target.value)} placeholder="Agregar paso…" />
             <Btn small type="submit">+</Btn>
+            <AiButton busy={ai.busy} type="button" onClick={() => void ai.run(async () => {
+              const r = await suggestSubtasks(t.title, [t.description, t.subtasks.length ? `Pasos que ya tiene: ${t.subtasks.map((x) => x.title).join('; ')}` : ''].filter(Boolean).join('\n'), subjects.find((s) => s.id === t.subjectId)?.name);
+              setPicked(new Set(r.pasos.map((_, i) => i)));
+              return r;
+            })}>Sugerir pasos</AiButton>
           </form>
+          {ai.error && <div className="warn">⚠ {ai.error}</div>}
+          {ai.result && (
+            <div className="ai-box">
+              <div><AiBadge /> <span className="hint">{ai.result.explicacion}</span></div>
+              {ai.result.pasos.map((p, i) => (
+                <label key={i} className="check">
+                  <input type="checkbox" checked={picked.has(i)} onChange={() => setPicked((s) => { const n = new Set(s); if (n.has(i)) n.delete(i); else n.add(i); return n; })} />
+                  {p}
+                </label>
+              ))}
+              <div className="row-btns">
+                <Btn small primary onClick={() => { set({ subtasks: [...t.subtasks, ...ai.result!.pasos.filter((_, i) => picked.has(i)).map((title) => ({ id: newId(), title, done: false }))] }); ai.setResult(null); }}>Agregar seleccionados</Btn>
+                <Btn small onClick={() => ai.setResult(null)}>Descartar</Btn>
+              </div>
+            </div>
+          )}
         </div>
         {t.subjectId && <div className="wide"><Dot color={subjects.find((s) => s.id === t.subjectId)?.color ?? '#999'} /> Creada {new Date(t.createdAt).toLocaleDateString()}</div>}
       </div>

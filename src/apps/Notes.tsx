@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { create, patch, remove, useRows, useSubjects, type ID, type Note } from '../db';
 import { norm } from '../lib/parse';
 import { Btn, Dot, Empty, Field, Input, Select, SubjectSelect } from '../os/ui';
+import { AiBadge, AiButton, useAiAction } from '../os/Ai';
+import { cardsFromNote, summarizeNote } from '../lib/aiFeatures';
+import { newCard } from './Cards';
 
 export default function Notes({ noteId }: { noteId?: ID }) {
   const notes = useRows('notes');
@@ -48,6 +51,9 @@ function Editor({ note, onClose }: { note: Note; onClose: () => void }) {
   const [title, setTitle] = useState(note.title);
   const [body, setBody] = useState(note.body);
   const timer = useRef<number>();
+  const cardsAi = useAiAction<{ pregunta: string; respuesta: string }[]>();
+  const sumAi = useAiAction<string>();
+  const [picked, setPicked] = useState<Set<number>>(new Set());
   const [saved, setSaved] = useState(true);
 
   const schedule = (t: string, b: string) => {
@@ -82,6 +88,44 @@ function Editor({ note, onClose }: { note: Note; onClose: () => void }) {
           <Input defaultValue={note.tags.join(', ')} onBlur={(e) => void patch('notes', note.id, { tags: e.target.value.split(',').map((x) => x.trim().toLowerCase()).filter(Boolean) })} />
         </Field>
       </div>
+      <div className="toolbar">
+        <AiButton busy={cardsAi.busy} disabled={body.trim().length < 40} title="Crear tarjetas de memoria con lo que escribiste" onClick={() => void cardsAi.run(async () => {
+          const r = await cardsFromNote(title, body);
+          setPicked(new Set(r.tarjetas.map((_, i) => i)));
+          return r.tarjetas;
+        })}>Crear tarjetas</AiButton>
+        <AiButton busy={sumAi.busy} disabled={body.trim().length < 40} onClick={() => void sumAi.run(() => summarizeNote(title, body))}>Resumir</AiButton>
+      </div>
+      {(cardsAi.error || sumAi.error) && <div className="warn">⚠ {cardsAi.error ?? sumAi.error}</div>}
+      {cardsAi.result && (
+        <div className="ai-box">
+          <AiBadge label={`${cardsAi.result.length} tarjetas sugeridas`} />
+          {cardsAi.result.length === 0 && <span className="hint">Este apunte no da para tarjetas todavía.</span>}
+          {cardsAi.result.map((c, i) => (
+            <label key={i} className="check">
+              <input type="checkbox" checked={picked.has(i)} onChange={() => setPicked((s) => { const n = new Set(s); if (n.has(i)) n.delete(i); else n.add(i); return n; })} />
+              <span><b>{c.pregunta}</b> → {c.respuesta}</span>
+            </label>
+          ))}
+          <div className="row-btns">
+            <Btn small primary disabled={!picked.size} onClick={async () => {
+              for (const [i, c] of cardsAi.result!.entries()) if (picked.has(i)) await newCard(c.pregunta, c.respuesta, note.subjectId, note.topicId, 'IA · apunte');
+              cardsAi.setResult(null);
+            }}>Agregar {picked.size} a Tarjetas</Btn>
+            <Btn small onClick={() => cardsAi.setResult(null)}>Descartar</Btn>
+          </div>
+        </div>
+      )}
+      {sumAi.result && (
+        <div className="ai-box">
+          <AiBadge label="Resumen generado por IA" />
+          <div className="ai-answer">{sumAi.result}</div>
+          <div className="row-btns">
+            <Btn small primary onClick={() => { const b = `${body}\n\n--- Resumen (IA) ---\n${sumAi.result}`; setBody(b); void patch('notes', note.id, { title, body: b }); sumAi.setResult(null); }}>Agregar al final del apunte</Btn>
+            <Btn small onClick={() => sumAi.setResult(null)}>Cerrar</Btn>
+          </div>
+        </div>
+      )}
       <textarea className="input note-body" value={body} placeholder="Escribe tus apuntes…" onChange={(e) => { setBody(e.target.value); schedule(title, e.target.value); }} onBlur={() => void patch('notes', note.id, { title, body })} />
     </>
   );

@@ -1,6 +1,6 @@
 import type { SpriteName } from '../pixel/sprites';
 
-export type AppId = 'today' | 'inbox' | 'subjects' | 'tasks' | 'calendar' | 'timer' | 'notes' | 'search' | 'stickers' | 'settings' | 'grades' | 'projects' | 'cards';
+export type AppId = 'today' | 'inbox' | 'subjects' | 'tasks' | 'calendar' | 'timer' | 'notes' | 'search' | 'stickers' | 'settings' | 'grades' | 'projects' | 'cards' | 'ask';
 
 export interface AppMeta {
   id: AppId;
@@ -23,6 +23,7 @@ export const APP_LIST: AppMeta[] = [
   { id: 'cards', title: 'Tarjetas', icon: 'cards', size: { w: 640, h: 580 }, desktop: true, tint: ['#c2410c', '#fdba74'] },
   { id: 'timer', title: 'Estudio', icon: 'timer', size: { w: 520, h: 600 }, desktop: true, tint: ['#d2434f', '#ffa898'] },
   { id: 'notes', title: 'Apuntes', icon: 'notes', size: { w: 820, h: 560 }, desktop: true, tint: ['#b0840c', '#f2d86a'] },
+  { id: 'ask', title: 'Pregúntale', icon: 'chat', size: { w: 620, h: 600 }, desktop: true, tint: ['#7a3fd0', '#ff9fd0'] },
   { id: 'search', title: 'Buscar', icon: 'search', size: { w: 600, h: 520 }, desktop: true, tint: ['#2f86bf', '#9fd6f5'] },
   { id: 'stickers', title: 'Stickers', icon: 'star', size: { w: 640, h: 600 }, desktop: true, tint: ['#e9579f', '#ffd36e'] },
   { id: 'settings', title: 'Panel de control', icon: 'gear', size: { w: 680, h: 600 }, desktop: true, tint: ['#5d5a8a', '#b4b0dc'] },

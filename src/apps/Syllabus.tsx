@@ -4,6 +4,8 @@ import { TOPIC_STATUS, topicRank, topicStatus } from '../lib/labels';
 import { Btn, Empty, LazyInput, Modal } from '../os/ui';
 import { useWM } from '../os/wm';
 import { pdfToText } from '../lib/pdf';
+import { AiBadge, AiButton, useAiAction } from '../os/Ai';
+import { structureSyllabus } from '../lib/aiFeatures';
 import { addReference } from './Bibliography';
 
 interface Draft {
@@ -155,6 +157,8 @@ function ImportModal({ subject, onClose }: { subject: Subject; onClose: () => vo
   const [drafts, setDrafts] = useState<Draft[] | null>(null);
   const [saveBiblio, setSaveBiblio] = useState(true);
   const pdfInput = useRef<HTMLInputElement>(null);
+  const ai = useAiAction<boolean>();
+  const [fromAi, setFromAi] = useState(false);
   const [pdfBusy, setPdfBusy] = useState<string | null>(null);
   const [pdfWarn, setPdfWarn] = useState<string | null>(null);
 
@@ -204,7 +208,19 @@ function ImportModal({ subject, onClose }: { subject: Subject; onClose: () => vo
       ) : (
         <>
           <Btn onClick={onClose}>Cancelar</Btn>
-          <Btn primary disabled={!text.trim()} onClick={() => setDrafts(parseSyllabus(text))}>Analizar</Btn>
+          <AiButton busy={ai.busy} disabled={!text.trim()} title="Para temarios desordenados o PDFs difíciles" onClick={() => void ai.run(async () => {
+            const r = await structureSyllabus(text);
+            setDrafts(r.items.map((it) => ({
+              title: it.titulo,
+              depth: Math.max(0, Math.min(3, Math.round(it.nivel))),
+              include: it.tipo === 'tema',
+              biblio: it.tipo === 'bibliografia',
+              flag: it.tipo === 'bibliografia' ? 'Referencia bibliográfica' : it.tipo === 'otro' ? 'No parece un tema' : it.confianza === 'baja' ? 'La IA no está segura del nivel' : undefined,
+            })));
+            setFromAi(true);
+            return true;
+          })}>Estructurar con IA</AiButton>
+          <Btn primary disabled={!text.trim()} onClick={() => { setFromAi(false); setDrafts(parseSyllabus(text)); }}>Analizar</Btn>
         </>
       )}
     >
@@ -217,11 +233,12 @@ function ImportModal({ subject, onClose }: { subject: Subject; onClose: () => vo
             <input ref={pdfInput} type="file" accept="application/pdf,.pdf,.txt,.md" hidden onChange={(e) => e.target.files?.[0] && void loadFile(e.target.files[0])} />
           </div>
           {pdfWarn && <div className="warn">⚠ {pdfWarn}</div>}
+          {ai.error && <div className="warn">⚠ {ai.error}</div>}
           <textarea className="input mono" rows={14} value={text} onChange={(e) => setText(e.target.value)} placeholder={'Unidad 1. Introducción a redes\n1.1 Modelo OSI\n1.2 TCP/IP\nUnidad 2. Capa de enlace\n2.1 Ethernet\n2.2 VLAN\n\nBibliografía\nTanenbaum, A. (2011). Redes de computadoras, 5ª ed. Pearson.'} />
         </>
       ) : (
         <>
-          <p className="hint">Revisa la estructura. Usa ← → para cambiar el nivel. Las líneas con ⚠ son las que no pude interpretar con seguridad.</p>
+          <p className="hint">{fromAi && <><AiBadge label="Estructura sugerida por IA" />{' '}</>}Revisa la estructura. Usa ← → para cambiar el nivel. Las líneas con ⚠ son las que no se pudieron interpretar con seguridad.</p>
           <ul className="draft-list">
             {drafts.map((d, i) => (
               <li key={i} className={d.include ? '' : 'excluded'} style={{ paddingLeft: d.depth * 18 }}>

@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react';
-import { create, patch, remove, useRows, useSubjects, type ID, type InboxItem, type InboxKind } from '../db';
+import { create, patch, remove, useRows, useSubjects, type ID, type InboxItem, type InboxKind, type Priority } from '../db';
 import { fmtDur, relDay } from '../lib/dates';
 import { KIND_COLOR, KIND_LABEL, parseCapture } from '../lib/parse';
 import { PRIORITY } from '../lib/labels';
 import { Btn, Chip, Empty, Select, SubjectSelect, Tabs } from '../os/ui';
 import { useWM } from '../os/wm';
 import { newCard } from './Cards';
+import { AiBadge, AiButton, useAiAction } from '../os/Ai';
+import { interpretCapture, type CaptureSuggestion } from '../lib/aiFeatures';
 
 type Filter = 'pending' | 'duda' | 'palabra' | 'all' | 'done';
 const KINDS = Object.keys(KIND_LABEL) as InboxKind[];
@@ -43,6 +45,7 @@ export default function Inbox() {
   const [sel, setSel] = useState<Set<ID>>(new Set());
   const [err, setErr] = useState<string | null>(null);
 
+  const ai = useAiAction<CaptureSuggestion>();
   const preview = useMemo(() => (text.trim() ? parseCapture(text, subjects) : null), [text, subjects]);
   const subName = (id?: ID) => subjects.find((s) => s.id === id)?.name;
 
@@ -60,6 +63,26 @@ export default function Inbox() {
     setText('');
     const row = await create('inbox', { text: preview.text, kind: asTask ? 'tarea' : preview.kind, subjectId: preview.subjectId, tags: preview.tags, due: preview.due, dueTime: preview.dueTime, estimateMin: preview.estimateMin, priority: preview.priority, processed: false });
     if (asTask) await convert(row, 'task');
+  };
+
+  const saveAi = async (asTask: boolean) => {
+    const r = ai.result;
+    if (!r) return;
+    const sub = r.materia ? subjects.find((s) => s.name.toLowerCase() === r.materia!.toLowerCase()) : undefined;
+    const row = await create('inbox', {
+      text: r.titulo,
+      kind: asTask ? 'tarea' : r.tipo,
+      subjectId: sub?.id,
+      tags: [...r.etiquetas.map((t) => t.toLowerCase()), 'ia'],
+      due: r.fecha && /^\d{4}-\d{2}-\d{2}$/.test(r.fecha) ? r.fecha : undefined,
+      dueTime: r.hora && /^\d{2}:\d{2}$/.test(r.hora) ? r.hora : undefined,
+      estimateMin: r.minutos ?? undefined,
+      priority: r.prioridad ? (Math.min(4, Math.max(1, Math.round(r.prioridad))) as Priority) : undefined,
+      processed: false,
+    });
+    if (asTask) await convert(row, 'task');
+    ai.setResult(null);
+    setText('');
   };
 
   const run = async (fn: () => Promise<unknown>) => {
@@ -116,6 +139,27 @@ export default function Inbox() {
           {preview.priority && <Chip color={PRIORITY[preview.priority].color}>{PRIORITY[preview.priority].label}</Chip>}
           {preview.tags.map((t) => <Chip key={t}>#{t}</Chip>)}
           <button type="button" className="link" onClick={() => void add(true)}>Crear como tarea directamente</button>
+          <AiButton busy={ai.busy} onClick={() => void ai.run(() => interpretCapture(text, subjects))}>Interpretar</AiButton>
+        </div>
+      )}
+      {ai.error && <div className="warn">⚠ {ai.error}</div>}
+      {ai.result && (
+        <div className="ai-box">
+          <div><AiBadge /> <span className="hint">{ai.result.explicacion}</span></div>
+          <div className="row-meta">
+            <Chip color={KIND_COLOR[ai.result.tipo]}>{KIND_LABEL[ai.result.tipo]}</Chip>
+            <b>{ai.result.titulo}</b>
+            {ai.result.materia && <Chip>{ai.result.materia}</Chip>}
+            {ai.result.fecha && <Chip>📅 {relDay(ai.result.fecha)}{ai.result.hora ? ` ${ai.result.hora}` : ''}</Chip>}
+            {ai.result.minutos ? <Chip>⏱ {fmtDur(ai.result.minutos)}</Chip> : null}
+            {ai.result.prioridad ? <Chip>{PRIORITY[Math.min(4, Math.max(1, Math.round(ai.result.prioridad))) as Priority].label}</Chip> : null}
+            {ai.result.etiquetas.map((t) => <Chip key={t}>#{t}</Chip>)}
+          </div>
+          <div className="row-btns">
+            <Btn small primary onClick={() => void saveAi(false)}>Guardar en la bandeja</Btn>
+            {ai.result.tipo === 'tarea' && <Btn small onClick={() => void saveAi(true)}>Crear tarea</Btn>}
+            <Btn small onClick={() => ai.setResult(null)}>Descartar</Btn>
+          </div>
         </div>
       )}
       <p className="hint">

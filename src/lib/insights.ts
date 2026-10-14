@@ -3,6 +3,7 @@ import { db, useRows, useSetting, useSubjects } from '../db';
 import type { AppId } from '../apps/meta';
 import { addDays, diffDays, nowHHMM, today, toMin, weekday } from './dates';
 import { isOpen } from './labels';
+import { fmtG, summarize } from './grades';
 
 export interface Insight {
   id: string;
@@ -27,6 +28,7 @@ export function useInsights(): Insight[] {
   const slots = useRows('slots');
   const events = useRows('events');
   const topics = useRows('topics');
+  const cards = useRows('cards');
   // undefined while loading, so onboarding doesn't flash before data arrives
   const semesterCount = useLiveQuery(() => db.semesters.count());
   const { subjects } = useSubjects();
@@ -69,6 +71,16 @@ export function useInsights(): Insight[] {
   const exams = events.filter((e) => e.kind === 'examen' && diffDays(e.date, t) >= 0 && diffDays(e.date, t) <= 7);
   for (const e of exams)
     out.push({ id: `exam-${e.id}`, tone: 'alert', text: `Examen «${e.title}» ${diffDays(e.date, t) === 0 ? 'hoy' : `en ${diffDays(e.date, t)} días`}. ¿Armamos un plan de repaso?`, action: { label: 'Ir a materias', app: 'subjects', props: { subjectId: e.subjectId, tab: 'temario' } } });
+
+  for (const sub of subjects) {
+    if (!sub.grading) continue;
+    const g = summarize(sub.grading);
+    const v = g.final ?? g.projected;
+    if (v !== undefined && v < sub.grading.pass)
+      out.push({ id: `risk-${sub.id}-${Math.round(v * 10)}`, tone: 'alert', text: `En ${sub.name} vas en ${fmtG(v)} (aprobatoria ${sub.grading.pass}). Todavía falta evaluar ${Math.round(g.remaining * 100)}% de la calificación: ¡se puede remontar!`, action: { label: 'Ver calificación', app: 'subjects', props: { subjectId: sub.id, tab: 'calif' } } });
+  }
+  const dueCards = cards.filter((c) => c.due <= t).length;
+  if (dueCards >= 5) out.push({ id: `cards-${t}`, tone: 'info', text: `Tienes ${dueCards} tarjetas para repasar hoy. Son unos minutos y ayudan muchísimo a recordar.`, action: { label: 'Repasar', app: 'cards' } });
 
   const unreviewed = topics.filter((x) => subjectIds.has(x.subjectId) && ['introducido', 'parcial', 'cubierto'].includes(x.status));
   if (unreviewed.length)

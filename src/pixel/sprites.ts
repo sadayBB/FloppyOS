@@ -337,6 +337,24 @@ export const SPRITES = {
     '................',
     '................',
   ],
+  chat: [
+    '................',
+    '..kkkkkkkkkkkk..',
+    '.kvvvvvvvvvvvvk.',
+    'kvwwvvvvvvvvvvVk',
+    'kvwvvvvvvvvvvvVk',
+    'kvvvwvvwvvwvvvVk',
+    'kvvvwvvwvvwvvvVk',
+    'kvvvvvvvvvvvvvVk',
+    '.kVVVVVVVVVVVVk.',
+    '..kkkkVkkkkkkk..',
+    '.....kVk........',
+    '.....kk.........',
+    '........kkkk....',
+    '.......kyyyyk...',
+    '........kkkk....',
+    '................',
+  ],
 } satisfies Record<string, string[]>;
 
 export type SpriteName = keyof typeof SPRITES;
