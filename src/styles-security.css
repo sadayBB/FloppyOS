@@ -109,3 +109,8 @@ html.pixel-cursor .boot-screen { cursor: var(--cur-wait); }
 .keep-device.ok { background: var(--ok-bg); }
 .keep-device details { width: 100%; }
 .keep-device ul { margin: 6px 0 0; padding-left: 18px; }
+
+/* Iconos del escritorio movibles */
+.icons { inset: 0; bottom: 40px; display: block; pointer-events: none; }
+.icons .desk-icon { position: absolute; pointer-events: auto; touch-action: none; user-select: none; }
+.icons .desk-icon.dragging { opacity: 0.75; z-index: 5; transition: none; }

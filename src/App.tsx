@@ -8,6 +8,7 @@ import { LockScreen } from './os/LockScreen';
 import { DialogHost } from './os/dialogs';
 import { BootScreen } from './os/BootScreen';
 import { ContextMenu } from './os/ContextMenu';
+import { DesktopIcons } from './os/DesktopIcons';
 import { useTrash } from './apps/Trash';
 import { applyPixelCursors } from './lib/cursors';
 import { init as initSync } from './lib/sync';
@@ -92,6 +93,7 @@ function Desktop() {
             { label: 'Pegar un sticker…', onClick: () => wm.open('stickers') },
             { label: 'Cambiar fondo de pantalla…', onClick: () => wm.open('settings', { tab: 'look' }) },
             { label: 'Papelera de reciclaje', onClick: () => wm.open('trash') },
+            { label: 'Organizar íconos', onClick: () => void db.local.delete('iconCells') },
             { label: '', separator: true },
             { label: 'Propiedades', onClick: () => wm.open('settings', { tab: 'look' }) },
           ]}
@@ -99,21 +101,13 @@ function Desktop() {
       )}
       {dots && !wallpaper.background && <div className="desk-dots" aria-hidden="true" />}
       <DesktopStickers />
-      <div className="icons">
-        {APP_LIST.filter((a) => a.desktop && (a.id !== 'ask' || aiEnabled)).map((a) => (
-          <button
-            key={a.id}
-            className={`desk-icon ${selected === a.id ? 'sel' : ''}`}
-            aria-label={a.title}
-            onPointerDown={iconDown(a.id)}
-            onDoubleClick={() => wm.open(a.id)}
-            onKeyDown={(e) => e.key === 'Enter' && wm.open(a.id)}
-          >
-            <Pixel sprite={a.id === 'trash' && trashCount ? 'trashFull' : a.icon} scale={3} />
-            <span>{a.title}</span>
-          </button>
-        ))}
-      </div>
+      <DesktopIcons
+        apps={APP_LIST.filter((a) => a.desktop && (a.id !== 'ask' || aiEnabled))}
+        iconFor={(a) => (a.id === 'trash' && trashCount ? 'trashFull' : a.icon)}
+        selected={selected}
+        onSelect={setSelected}
+        onOpen={(id) => wm.open(id)}
+      />
 
       {wm.wins.map((w) => {
         const C = APP_COMPONENTS[w.appId];
