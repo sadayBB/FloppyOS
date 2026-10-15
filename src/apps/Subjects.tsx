@@ -13,6 +13,7 @@ import { toggleDone } from './Tasks';
 import { stickerToIcon, SubjectIcon } from './SubjectIcon';
 import { GradesTab } from './Grades';
 import { Bibliography } from './Bibliography';
+import { askConfirm } from '../os/dialogs';
 
 type Tab = 'info' | 'horario' | 'temario' | 'tareas' | 'clases' | 'notas' | 'calif' | 'biblio';
 
@@ -167,7 +168,7 @@ function SubjectInfo({ s, onDeleted }: { s: Subject; onDeleted: () => void }) {
       </Field>
       <Field label="Descripción" wide><LazyInput multiline value={s.description ?? ''} onCommit={(v) => set({ description: v })} /></Field>
       <div className="wide">
-        <Btn onClick={() => { if (confirm(`¿Eliminar «${s.name}»? Sus tareas y apuntes se conservan sin materia.`)) { void remove('subjects', s.id); onDeleted(); } }}>Eliminar materia</Btn>
+        <Btn onClick={async () => { if (await askConfirm(`¿Eliminar «${s.name}»?`, { ...{ title: 'Confirmar eliminación', danger: true, ok: 'Sí', cancel: 'No' }, detail: 'Sus tareas y apuntes se conservan sin materia.' })) { void remove('subjects', s.id); onDeleted(); } }}>Eliminar materia</Btn>
       </div>
     </div>
   );

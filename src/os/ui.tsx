@@ -127,6 +127,4 @@ export function Modal({ title, onClose, children, footer }: { title: string; onC
   );
 }
 
-export function confirmBox(msg: string) {
-  return window.confirm(msg);
-}
+export { askConfirm as confirmBox } from './dialogs';

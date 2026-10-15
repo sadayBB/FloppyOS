@@ -8,6 +8,7 @@ import { AiBadge, AiButton, useAiAction } from '../os/Ai';
 import { structureSyllabus } from '../lib/aiFeatures';
 import { addReference } from './Bibliography';
 import { splitReferences } from '../lib/biblio';
+import { askConfirm } from '../os/dialogs';
 
 interface Draft {
   title: string;
@@ -121,7 +122,7 @@ export function Syllabus({ subject }: { subject: Subject }) {
             <button className="icon-btn" title="Agregar subtema" onClick={() => void addTopic(t.id)}>+</button>
             <button className="icon-btn" title="Subir" onClick={() => move(t, -1)}>↑</button>
             <button className="icon-btn" title="Bajar" onClick={() => move(t, 1)}>↓</button>
-            <button className="icon-btn" title="Eliminar" onClick={() => { if (confirm(`¿Eliminar «${t.title}» y sus subtemas?`)) void removeTree(t); }}>×</button>
+            <button className="icon-btn" title="Eliminar" onClick={async () => { if (await askConfirm(`¿Eliminar «${t.title}» y sus subtemas?`, { title: 'Confirmar eliminación', danger: true, ok: 'Sí', cancel: 'No' })) void removeTree(t); }}>×</button>
           </span>
         </li>,
         ...kids,

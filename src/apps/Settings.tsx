@@ -14,6 +14,7 @@ import { Pixel } from '../pixel/Pixel';
 import { CatSprite, EYES, FURS, useCat, type CatLook } from '../pixel/cat';
 import { Btn, Field, Input, Select, Tabs } from '../os/ui';
 import { AI_MODELS, getAiConfig, setAiConfig, testAi, type AiModel } from '../lib/ai';
+import { askConfirm } from '../os/dialogs';
 
 type Tab = 'general' | 'look' | 'sync' | 'alerts' | 'ai' | 'privacy' | 'backup' | 'about';
 
@@ -452,7 +453,7 @@ function Privacy() {
           </div>
           <div className="row-btns">
             <Btn onClick={lockNow}>Bloquear ahora</Btn>
-            <Btn onClick={() => confirm('¿Quitar el PIN de este dispositivo?') && void removePin()}>Quitar PIN</Btn>
+            <Btn onClick={async () => { if (await askConfirm('¿Quitar el PIN de este dispositivo?', { kind: 'question' })) void removePin(); }}>Quitar PIN</Btn>
           </div>
         </>
       ) : (
@@ -494,7 +495,7 @@ function Privacy() {
 
       <h3>Sesiones</h3>
       <p className="hint">Si pierdes un dispositivo, cierra la sesión en todos: tendrás que volver a iniciar sesión en cada uno.</p>
-      <Btn disabled={busy || !sync.email} onClick={() => confirm('¿Cerrar la sesión en TODOS tus dispositivos?') && void run(async () => { await signOutEverywhere(); return 'Sesión cerrada en todos los dispositivos.'; })}>Cerrar sesión en todos los dispositivos</Btn>
+      <Btn disabled={busy || !sync.email} onClick={async () => { if (await askConfirm('¿Cerrar la sesión en TODOS tus dispositivos?', { kind: 'warning', detail: 'Tendrás que volver a iniciar sesión en cada uno.' })) void run(async () => { await signOutEverywhere(); return 'Sesión cerrada en todos los dispositivos.'; }); }}>Cerrar sesión en todos los dispositivos</Btn>
       {msg && <p className="notice">{msg}</p>}
 
       <h3>Qué se guarda y dónde</h3>
@@ -598,8 +599,8 @@ function Backup() {
       <h3>Zona de peligro</h3>
       <Btn
         onClick={async () => {
-          if (!confirm('¿Borrar TODOS los datos de este dispositivo? Si usas sincronización, se volverán a descargar al iniciar sesión.')) return;
-          if (!confirm('Seguro, ¿de verdad? Lo que no esté sincronizado ni respaldado se perderá.')) return;
+          if (!(await askConfirm('¿Borrar TODOS los datos de este dispositivo?', { danger: true, detail: 'Si usas sincronización, se volverán a descargar al iniciar sesión.' }))) return;
+          if (!(await askConfirm('¿Seguro? Lo que no esté sincronizado ni respaldado se perderá.', { kind: 'error', danger: true, title: 'Última confirmación', ok: 'Borrar todo' }))) return;
           await Promise.all([...DATA_TABLES.map((t) => db.table(t).clear()), db.settings.clear()]);
           localStorage.removeItem('floppyos.sync.cursor');
           setMsg('Datos locales borrados.');

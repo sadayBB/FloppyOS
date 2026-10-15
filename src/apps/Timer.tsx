@@ -4,6 +4,7 @@ import { fmtDur, startOfWeek, today, toISO } from '../lib/dates';
 import { isOpen, topicRank } from '../lib/labels';
 import { fmtClock, remainingMs, timer, totals, useTimer } from '../lib/timer';
 import { Btn, Dot, Field, Input, Progress, Select, SubjectSelect } from '../os/ui';
+import { askConfirm } from '../os/dialogs';
 
 export default function Timer({ subjectId, topicId, taskId }: { subjectId?: ID; topicId?: ID; taskId?: ID }) {
   const s = useTimer();
@@ -52,7 +53,7 @@ export default function Timer({ subjectId, topicId, taskId }: { subjectId?: ID; 
         {s.phase !== 'idle' && !s.running && <Btn primary onClick={() => timer.resume()}>▶ Reanudar</Btn>}
         {s.phase !== 'idle' && <Btn onClick={() => timer.skip()}>{s.phase === 'focus' ? 'Ir a descanso' : 'Saltar descanso'}</Btn>}
         {s.phase !== 'idle' && <Btn onClick={() => timer.stop()}>■ Terminar</Btn>}
-        {s.phase !== 'idle' && <Btn onClick={() => confirm('¿Descartar esta sesión? No se guardará el tiempo.') && timer.reset()}>Descartar</Btn>}
+        {s.phase !== 'idle' && <Btn onClick={async () => { if (await askConfirm('¿Descartar esta sesión?', { danger: true, detail: 'No se guardará el tiempo estudiado.', ok: 'Descartar' })) timer.reset(); }}>Descartar</Btn>}
       </div>
 
       <div className="form">

@@ -42,3 +42,13 @@
 
 .title-swatches { margin: 6px 0 10px; }
 .title-preview { margin-left: 8px; padding: 3px 10px; color: #fff; font-weight: 600; text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.25); min-width: 180px; }
+
+/* Cuadros de mensaje estilo Windows 2000 */
+.msgbox-backdrop { z-index: 30000; background: transparent; }
+.msgbox { width: min(420px, 100%); box-shadow: var(--out), 4px 4px 0 rgba(0, 0, 0, 0.35); }
+.msgbox-body { display: flex; gap: 14px; align-items: flex-start; padding: 16px 16px 10px; }
+.msgbox-body svg { flex-shrink: 0; margin-top: 2px; }
+.msgbox-body p { margin: 0 0 6px; line-height: 1.4; }
+.msgbox-buttons { display: flex; justify-content: center; gap: 8px; padding: 6px 16px 14px; }
+.msgbox-btn { min-width: 84px; }
+.msgbox-btn:focus-visible { outline: 1px dotted var(--ink); outline-offset: -5px; }

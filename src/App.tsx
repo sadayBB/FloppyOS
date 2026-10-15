@@ -5,6 +5,7 @@ import { APP_COMPONENTS } from './apps/registry';
 import { db, useSetting } from './db';
 import type { LockConfig } from './lib/lock';
 import { LockScreen } from './os/LockScreen';
+import { DialogHost } from './os/dialogs';
 import { init as initSync } from './lib/sync';
 import { useWallpaperCss } from './lib/wallpaper';
 import { useReminderEngine } from './lib/reminders';
@@ -125,6 +126,7 @@ export default function App() {
   return (
     <WMProvider>
       <Desktop />
+      <DialogHost />
     </WMProvider>
   );
 }

@@ -3,6 +3,7 @@ import { create, patch, remove, useRows, type ID, type Reference, type RefKind, 
 import { parseReference, referenceLinks, splitReferences, verifyReference, VERIFY_LABEL, type Candidate } from '../lib/biblio';
 import { Btn, Chip, Empty, Field, LazyInput, Modal } from '../os/ui';
 import { safeUrl } from '../lib/safeUrl';
+import { askConfirm } from '../os/dialogs';
 
 const KIND: Record<RefKind, string> = { obligatoria: 'Obligatoria', complementaria: 'Complementaria', recomendada: 'Recomendada por el profe' };
 const STATUS: Record<RefStatus, string> = { por_conseguir: 'Por conseguir', disponible: 'Ya la tengo', leyendo: 'Leyendo', terminada: 'Terminada' };
@@ -137,7 +138,7 @@ export function Bibliography({ subject }: { subject: Subject }) {
             <div className="row-actions">
               <Btn small disabled={!!busy} onClick={() => void verifyOne(r)}>{busy === r.id ? '…' : 'Verificar'}</Btn>
               <Btn small onClick={() => setEditing(r.id)}>Editar</Btn>
-              <Btn small aria-label="Eliminar" onClick={() => confirm('¿Eliminar esta referencia?') && void remove('refs', r.id)}>🗑</Btn>
+              <Btn small aria-label="Eliminar" onClick={async () => { if (await askConfirm('¿Eliminar esta referencia?', { title: 'Confirmar eliminación', danger: true, ok: 'Sí', cancel: 'No' })) void remove('refs', r.id); }}>🗑</Btn>
             </div>
           </li>
         ))}

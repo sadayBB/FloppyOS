@@ -6,6 +6,7 @@ import { Btn, Chip, Empty, Field, Input, LazyInput, Progress, Select, SubjectSel
 import { useWM } from '../os/wm';
 import { toggleDone } from './Tasks';
 import { safeUrl } from '../lib/safeUrl';
+import { askConfirm } from '../os/dialogs';
 
 type Tab = 'resumen' | 'tablero' | 'entrega' | 'bitacora';
 const BOARD: TaskStatus[] = ['pendiente', 'en_progreso', 'bloqueada', 'completada'];
@@ -121,7 +122,7 @@ function ProjectView({ p, tasks, subjects, onBack }: { p: Project; tasks: Task[]
               </ul>
               <InlineAdd placeholder="Pega un enlace (repo, Drive, Figma…)" onAdd={(t) => set({ links: [...p.links, { id: newId(), label: t.replace(/^https?:\/\/(www\.)?/, '').slice(0, 50), url: /^https?:\/\//.test(t) ? t : `https://${t}` }] })} />
             </div>
-            <div className="wide"><Btn small onClick={() => confirm('¿Eliminar el proyecto? Sus tareas se conservan.') && void remove('projects', p.id).then(onBack)}>Eliminar proyecto</Btn></div>
+            <div className="wide"><Btn small onClick={async () => { if (await askConfirm('¿Eliminar el proyecto?', { ...{ title: 'Confirmar eliminación', danger: true, ok: 'Sí', cancel: 'No' }, detail: 'Sus tareas se conservan.' })) void remove('projects', p.id).then(onBack); }}>Eliminar proyecto</Btn></div>
           </div>
         )}
 

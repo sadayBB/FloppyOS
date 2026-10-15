@@ -4,6 +4,7 @@ import { calcGroup, contributions, fmtG, fmtPct, item, needed, round, summarize,
 import { Btn, Chip, Empty, Field, Input, Select } from '../os/ui';
 import { useWM } from '../os/wm';
 import { SubjectIcon } from './SubjectIcon';
+import { askConfirm } from '../os/dialogs';
 
 const status = (s: GradingScheme, v?: number) => (v === undefined ? 'neutral' : v >= s.pass ? 'ok' : 'risk');
 
@@ -174,7 +175,7 @@ export function GradesTab({ s }: { s: Subject }) {
               <option value="">Plantilla…</option>
               {TEMPLATES.map((t, i) => <option key={t.name} value={i}>{t.name}</option>)}
             </Select>
-            <Btn small onClick={() => confirm(`¿Quitar ${u.name}?`) && setUnits(g.units.filter((x) => x.id !== u.id))}>Quitar</Btn>
+            <Btn small onClick={async () => { if (await askConfirm(`¿Quitar ${u.name} y sus calificaciones?`, { title: 'Confirmar eliminación', danger: true, ok: 'Sí', cancel: 'No' })) setUnits(g.units.filter((x) => x.id !== u.id)); }}>Quitar</Btn>
           </header>
           {itemsTable(u.items, (items) => setUnits(g.units.map((x) => (x.id === u.id ? { ...x, items } : x))))}
           <div className="row-btns">
@@ -229,7 +230,7 @@ export function GradesTab({ s }: { s: Subject }) {
               <Input type="number" placeholder="igual" value={u.weight ?? ''} onChange={(e) => setUnits(g.units.map((x) => (x.id === u.id ? { ...x, weight: e.target.value === '' ? undefined : +e.target.value } : x)))} />
             </Field>
           ))}
-          <div className="wide"><Btn small onClick={() => confirm('¿Borrar todo el esquema de calificación de esta materia?') && void patch('subjects', s.id, { grading: undefined })}>Borrar esquema</Btn></div>
+          <div className="wide"><Btn small onClick={async () => { if (await askConfirm('¿Borrar todo el esquema de calificación de esta materia?', { ...{ title: 'Confirmar eliminación', danger: true, ok: 'Sí', cancel: 'No' }, detail: 'Se perderán las ponderaciones y calificaciones registradas.' })) void patch('subjects', s.id, { grading: undefined }); }}>Borrar esquema</Btn></div>
         </div>
       </details>
       <p className="hint">Cómo se calcula: cada actividad vale (peso del grupo) × (su peso ÷ suma de pesos del grupo). «Asegurado» suma solo lo ya calificado; «proyectada» supone que lo que falta lo sacas con tu promedio actual.</p>

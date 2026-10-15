@@ -5,6 +5,7 @@ import { Btn, Dot, Empty, Field, Input, Select, SubjectSelect } from '../os/ui';
 import { AiBadge, AiButton, useAiAction } from '../os/Ai';
 import { cardsFromNote, summarizeNote } from '../lib/aiFeatures';
 import { newCard } from './Cards';
+import { askConfirm } from '../os/dialogs';
 
 export default function Notes({ noteId }: { noteId?: ID }) {
   const notes = useRows('notes');
@@ -74,7 +75,7 @@ function Editor({ note, onClose }: { note: Note; onClose: () => void }) {
         <Btn small className="only-compact" onClick={onClose}>←</Btn>
         <input className="input title-input" value={title} placeholder="Título" onChange={(e) => { setTitle(e.target.value); schedule(e.target.value, body); }} onBlur={() => void patch('notes', note.id, { title, body })} />
         <span className="hint">{saved ? 'Guardado' : 'Guardando…'}</span>
-        <Btn small onClick={() => { if (confirm('¿Eliminar este apunte?')) { void remove('notes', note.id); onClose(); } }}>Eliminar</Btn>
+        <Btn small onClick={async () => { if (await askConfirm('¿Eliminar este apunte?', { title: 'Confirmar eliminación', danger: true, ok: 'Sí', cancel: 'No' })) { void remove('notes', note.id); onClose(); } }}>Eliminar</Btn>
       </div>
       <div className="note-props">
         <Field label="Materia"><SubjectSelect subjects={subjects} value={note.subjectId} onChange={(id) => void patch('notes', note.id, { subjectId: id, topicId: undefined })} /></Field>
