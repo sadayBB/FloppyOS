@@ -72,6 +72,21 @@ export default function Tasks({ filter: initFilter, taskId }: { filter?: Filter;
       return 340;
     }
   });
+  const [showList, setShowListState] = useState(() => {
+    try {
+      return localStorage.getItem('floppyos.tasks.showList') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const setShowList = (v: boolean) => {
+    setShowListState(v);
+    try {
+      localStorage.setItem('floppyos.tasks.showList', v ? '1' : '0');
+    } catch {
+      /* ignore */
+    }
+  };
   const setListW = (w: number) => {
     setListWState(w);
     try {
@@ -102,7 +117,8 @@ export default function Tasks({ filter: initFilter, taskId }: { filter?: Filter;
   };
 
   return (
-    <div className={`app split ${sel ? 'has-detail' : ''}`}>
+    <div className={`app split ${sel ? 'has-detail' : ''} ${sel && !showList ? 'task-focus' : ''}`}>
+      {!sel && (
       <aside className="sidebar">
         {FILTERS.map((f) => (
           <button key={f.id} className={`side-item ${filter === f.id ? 'on' : ''}`} onClick={() => setFilter(f.id)}>
@@ -113,7 +129,9 @@ export default function Tasks({ filter: initFilter, taskId }: { filter?: Filter;
         <hr />
         <SubjectSelect subjects={subjects} value={subject} onChange={setSubject} none="Todas las materias" />
       </aside>
+      )}
 
+      {(!sel || showList) && (
       <div className="pane list-pane" style={sel ? { flex: `0 0 ${listW}px` } : undefined}>
         <form className="capture" onSubmit={(e) => { e.preventDefault(); void addQuick(); }}>
           <input className="input" value={quick} onChange={(e) => setQuick(e.target.value)} placeholder="Nueva tarea… (acepta @materia, fechas y duración)" aria-label="Nueva tarea" />
@@ -150,13 +168,14 @@ export default function Tasks({ filter: initFilter, taskId }: { filter?: Filter;
         </div>
       </div>
 
-      {sel && <Splitter width={listW} onChange={setListW} />}
-      {sel && <TaskDetail key={sel.id} task={sel} tasks={tasks} onClose={() => setSelId(undefined)} />}
+      )}
+      {sel && showList && <Splitter width={listW} onChange={setListW} />}
+      {sel && <TaskDetail key={sel.id} task={sel} tasks={tasks} onClose={() => setSelId(undefined)} listShown={showList} onToggleList={() => setShowList(!showList)} />}
     </div>
   );
 }
 
-function TaskDetail({ task: t, tasks, onClose }: { task: Task; tasks: Task[]; onClose: () => void }) {
+function TaskDetail({ task: t, tasks, onClose, listShown, onToggleList }: { task: Task; tasks: Task[]; onClose: () => void; listShown: boolean; onToggleList: () => void }) {
   const { subjects } = useSubjects();
   const projects = useRows('projects');
   const wm = useWM();
@@ -178,6 +197,7 @@ function TaskDetail({ task: t, tasks, onClose }: { task: Task; tasks: Task[]; on
     <div className="pane detail">
       <div className="detail-head">
         <Btn small onClick={onClose}>← Volver</Btn>
+        <Btn small className="hide-compact" onClick={onToggleList} title={listShown ? 'Ocultar la lista de tareas' : 'Mostrar la lista de tareas a un lado'}>☰ {listShown ? 'Ocultar lista' : 'Lista'}</Btn>
         <span className="grow" />
         <Btn small onClick={() => wm.open('timer', { taskId: t.id, subjectId: t.subjectId })}>▶ Estudiar</Btn>
         <Btn small onClick={async () => {

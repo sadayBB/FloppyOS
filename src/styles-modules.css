@@ -171,3 +171,9 @@ html.pixel-cursor .splitter { cursor: col-resize; }
   .splitter { display: none; }
   .app.split.has-detail > .list-pane { flex: 1 !important; }
 }
+
+/* Tarea abierta = vista principal, centrada */
+.app.split.task-focus > .detail { flex: 1; background: var(--face); }
+.detail:has(.task-sheet) > .detail-head { width: 100%; max-width: 920px; margin: 0 auto; }
+.app.split.task-focus .task-sheet { padding: 4px 12px 16px; }
+@media (max-width: 819px) { .hide-compact { display: none; } }
