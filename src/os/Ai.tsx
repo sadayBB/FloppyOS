@@ -1,5 +1,6 @@
 import { useEffect, useState, type ButtonHTMLAttributes } from 'react';
 import { aiReady } from '../lib/ai';
+import { useSetting } from '../db';
 import { Btn } from './ui';
 
 export function useAiReady() {
@@ -17,9 +18,16 @@ export function AiBadge({ label = 'Sugerido por IA' }: { label?: string }) {
   return <span className="ai-badge">✨ {label}</span>;
 }
 
-/** ✨ button that explains itself when AI isn't configured. */
+/** AI features are opt-in: hidden everywhere until turned on in Panel de control → Estudio. */
+export function useAiEnabled() {
+  return useSetting('aiEnabled', false)[0];
+}
+
+/** ✨ button that explains itself when AI isn't configured. Renders nothing when AI is turned off. */
 export function AiButton({ busy, children, ...p }: ButtonHTMLAttributes<HTMLButtonElement> & { busy?: boolean }) {
   const ready = useAiReady();
+  const enabled = useAiEnabled();
+  if (!enabled) return null;
   return (
     <Btn small {...p} disabled={!ready || busy || p.disabled} title={ready ? p.title : 'Configura la IA en Panel de control → IA'}>
       {busy ? '✨ Pensando…' : <>✨ {children}</>}

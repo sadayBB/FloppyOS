@@ -8,6 +8,7 @@ import { useWM } from '../os/wm';
 import { newCard } from './Cards';
 import { AiBadge, AiButton, useAiAction } from '../os/Ai';
 import { interpretCapture, type CaptureSuggestion } from '../lib/aiFeatures';
+import { useWindowStatus } from '../os/status';
 
 type Filter = 'pending' | 'duda' | 'palabra' | 'all' | 'done';
 const KINDS = Object.keys(KIND_LABEL) as InboxKind[];
@@ -48,6 +49,7 @@ export default function Inbox() {
   const ai = useAiAction<CaptureSuggestion>();
   const preview = useMemo(() => (text.trim() ? parseCapture(text, subjects) : null), [text, subjects]);
   const subName = (id?: ID) => subjects.find((s) => s.id === id)?.name;
+  useWindowStatus([`${items.filter((i) => !i.processed).length} sin organizar`, `${items.filter((i) => i.kind === 'duda' && !i.resolved).length} dudas abiertas`, `${items.length} en total`]);
 
   const list = items
     .filter((i) =>

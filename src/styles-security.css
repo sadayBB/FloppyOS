@@ -52,3 +52,60 @@
 .msgbox-buttons { display: flex; justify-content: center; gap: 8px; padding: 6px 16px 14px; }
 .msgbox-btn { min-width: 84px; }
 .msgbox-btn:focus-visible { outline: 1px dotted var(--ink); outline-offset: -5px; }
+
+/* Pantalla de arranque */
+.boot-screen { position: fixed; inset: 0; z-index: 40000; background: #000; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; cursor: default; }
+.boot-logo { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.boot-name { font-size: 40px; letter-spacing: 2px; }
+.boot-name b { color: #ffe27a; }
+.boot-sub { font-size: 14px; color: #b9b3d6; letter-spacing: 3px; text-transform: uppercase; }
+.boot-bar { position: relative; width: 220px; height: 18px; border: 2px solid #8a84b0; overflow: hidden; background: #000; }
+.boot-bar i { position: absolute; top: 2px; bottom: 2px; width: 12%; background: linear-gradient(90deg, #4a6fd8, #9fd6f5); }
+.boot-hint { font-size: 12px; color: #8a84b0; }
+
+/* Globos de la bandeja */
+.tray-balloon {
+  position: fixed;
+  right: 10px;
+  bottom: 48px;
+  z-index: 9600;
+  width: min(300px, calc(100vw - 20px));
+  padding: 8px 26px 8px 10px;
+  background: #ffffe1;
+  color: #1b1b1b;
+  border: 1px solid #1b1b1b;
+  border-radius: 6px;
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.3);
+  animation: balloon-in 0.18s steps(3);
+}
+.tray-balloon::after { content: ''; position: absolute; right: 34px; bottom: -10px; border: 5px solid transparent; border-top-color: #1b1b1b; border-left-color: #1b1b1b; }
+.tray-balloon b { display: block; font-size: 14px; margin-bottom: 2px; }
+.tray-balloon p { margin: 0; font-size: 13px; line-height: 1.35; }
+.tray-balloon.clickable { cursor: pointer; }
+@keyframes balloon-in { from { transform: translateY(8px); opacity: 0; } }
+
+/* Menú contextual */
+.ctx-menu { position: fixed; z-index: 9700; min-width: 200px; display: flex; flex-direction: column; padding: 3px; background: var(--face); box-shadow: var(--out), 2px 2px 0 rgba(0, 0, 0, 0.3); }
+.ctx-menu button { border: 0; background: none; text-align: left; padding: 5px 18px 5px 22px; cursor: pointer; }
+.ctx-menu button:hover:not(:disabled) { background: var(--sel); color: #fff; }
+.ctx-menu button:disabled { color: var(--sh); }
+.ctx-menu hr { margin: 3px 2px; }
+
+/* Barra de estado de las ventanas */
+.statusbar { display: flex; gap: 3px; padding: 2px 0 0; flex-shrink: 0; font-size: 12px; }
+.statusbar span { padding: 1px 8px; box-shadow: inset 1px 1px 0 var(--sh), inset -1px -1px 0 var(--hi); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.statusbar span:first-child { flex: 1; }
+
+/* Cursores pixel art */
+html.pixel-cursor body,
+html.pixel-cursor .desktop,
+html.pixel-cursor .titlebar { cursor: var(--cur-default); }
+html.pixel-cursor :is(button, a, select, label, summary, .side-item, .desk-icon, .drive, .album-slot, .grade-card, .dsticker, input[type='checkbox'], input[type='color'], .tray-balloon.clickable, .board-card):not(:disabled) { cursor: var(--cur-pointer); }
+html.pixel-cursor :is(input:not([type='checkbox']):not([type='color']), textarea) { cursor: text; }
+html.pixel-cursor .boot-screen { cursor: var(--cur-wait); }
+.effect-toggles { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+
+.keep-device { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; margin-bottom: 10px; background: var(--warn-bg); box-shadow: var(--in); }
+.keep-device.ok { background: var(--ok-bg); }
+.keep-device details { width: 100%; }
+.keep-device ul { margin: 6px 0 0; padding-left: 18px; }

@@ -1,5 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import type { ID } from '../db';
+import { playSound } from './sounds';
+import { showBalloon } from '../os/balloon';
 
 export type Phase = 'idle' | 'focus' | 'break';
 
@@ -105,12 +107,14 @@ function switchPhase(now: number) {
     const len = (cycles % c.longEvery === 0 ? c.longBreakMin : c.breakMin) * 60000;
     set({ ...acc, cycles, phase: 'break', phaseEndsAt: now + len, remainingMs: len, segStart: now });
     notify('FloppyOS', '¡Bloque de concentración terminado! Toca descanso.');
+    showBalloon('Toca descanso', `Terminaste un bloque de ${c.focusMin} min. Estírate, toma agua y vuelve.`, { icon: '⏳', sound: false });
   } else {
     const len = c.focusMin * 60000;
     set({ ...acc, phase: 'focus', phaseEndsAt: now + len, remainingMs: len, segStart: now });
     notify('FloppyOS', 'Descanso terminado. ¡De vuelta al estudio!');
+    showBalloon('Fin del descanso', '¡De vuelta al estudio!', { icon: '⏳', sound: false });
   }
-  beep();
+  playSound('done');
 }
 
 setInterval(() => {

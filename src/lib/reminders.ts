@@ -4,6 +4,7 @@ import { addDays, fromISO, today, toMin } from './dates';
 import { EVENT_KIND, isOpen } from './labels';
 import { getClient } from './sync';
 import { VAPID_PUBLIC_KEY } from './vapid';
+import { showBalloon } from '../os/balloon';
 
 export interface Reminder {
   id: string;
@@ -67,6 +68,8 @@ export function computeReminders(tasks: Task[], events: CalEvent[], d: ReminderD
 }
 
 async function show(r: Reminder) {
+  // Inside the app the reminder always appears as a tray balloon; the system notification is extra.
+  showBalloon(r.title.replace(/^\S+\s/, ''), r.body, { icon: r.title.split(' ')[0] });
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   const reg = await navigator.serviceWorker?.getRegistration();
   const opts = { body: r.body, icon: './icon-192.png', badge: './icon-192.png', tag: r.id };

@@ -9,6 +9,8 @@ export interface Base {
   createdAt: number;
   updatedAt: number;
   deletedAt?: number;
+  /** Removed from the recycle bin (still kept as a tombstone so the deletion syncs). */
+  purged?: boolean;
 }
 
 export type SemesterStatus = 'planeado' | 'activo' | 'archivado';
@@ -341,6 +343,26 @@ export async function remove(name: TableName, id: ID) {
   const cur = await t.get(id);
   if (cur) await t.put({ ...cur, deletedAt: Date.now(), updatedAt: Date.now() });
   changed();
+}
+
+/** Brings a deleted record back from the recycle bin. */
+export async function restore(name: TableName, id: ID) {
+  const t = db[name] as unknown as Table<Base, ID>;
+  const cur = await t.get(id);
+  if (!cur) return;
+  const { deletedAt: _d, purged: _p, ...rest } = cur;
+  await t.put({ ...rest, updatedAt: Date.now() } as Base);
+  changed();
+}
+
+/** Empties a record from the recycle bin; it stays a hidden tombstone so other devices learn about it. */
+export async function purge(name: TableName, id: ID) {
+  const t = db[name] as unknown as Table<Base, ID>;
+  const cur = await t.get(id);
+  if (cur?.deletedAt) {
+    await t.put({ ...cur, purged: true, updatedAt: Date.now() });
+    changed();
+  }
 }
 
 /** Live list of non-deleted rows of a table. */

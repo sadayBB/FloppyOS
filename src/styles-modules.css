@@ -113,3 +113,22 @@
 .verify-tag.confirmada { color: #1f7a45; border-color: #2e9d5b; background: rgba(46, 157, 91, 0.12); }
 .verify-tag.probable { color: #8a5a10; border-color: #d9a24e; background: rgba(217, 162, 78, 0.14); }
 .verify-tag.no_encontrada, .verify-tag.no_verificada { color: var(--ink-soft); }
+
+/* ¿Qué hago ahora? y Mi PC */
+.nextup-cta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.nextup-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.nextup-list li { display: flex; align-items: center; gap: 10px; padding: 6px 8px; background: var(--field); box-shadow: var(--in); }
+.nextup-list li.top { background: var(--ok-bg); }
+.nextup-list li.nextup-foot { background: none; box-shadow: none; justify-content: flex-end; padding: 0; }
+.today > .card.nextup { --c1: #2e9d5b; --c2: #a6e8b8; }
+.today > .card.drives { --c1: #5d5a8a; --c2: #b4b0dc; }
+.drive-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+.drive { display: flex; align-items: center; gap: 10px; padding: 6px; border: 0; background: none; text-align: left; cursor: pointer; }
+.drive:hover { background: var(--hover); }
+.drive-icon { flex-shrink: 0; width: 36px; display: grid; place-items: center; }
+.drive-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.drive-bar { height: 12px; background: var(--field); box-shadow: var(--in); padding: 2px; }
+.drive-bar i { display: block; height: 100%; min-width: 2px; }
+.plan-preview { max-height: 200px; overflow: auto; font-size: 13px; }
+.trash-table td { vertical-align: middle; } .trash-table td.ellipsis { max-width: 260px; }
+.props-body { max-height: 60vh; overflow: auto; }

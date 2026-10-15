@@ -5,6 +5,11 @@ import { EVENT_KIND, isOpen, PRIORITY } from '../lib/labels';
 import { Btn, Chip, Dot, Empty, Progress } from '../os/ui';
 import { useWM } from '../os/wm';
 import { toggleDone } from './Tasks';
+import { useState } from 'react';
+import { suggestNext } from '../lib/nextAction';
+import { topicRank } from '../lib/labels';
+import { SubjectIcon } from './SubjectIcon';
+import { Pixel } from '../pixel/Pixel';
 
 /** Daily dashboard (RF-102, RF-48, RF-60, RF-103). */
 export default function Today() {
@@ -61,6 +66,9 @@ export default function Today() {
           ))}
         </ul>
       )}
+
+      <NextUp />
+      <Drives />
 
       <div className="cards">
         <section className="card">
@@ -130,5 +138,72 @@ export default function Today() {
         <p className="hint">Tareas pendientes según su estimado (30 min si no tiene) + 2 h por cada examen o entrega. La línea punteada es tu capacidad diaria ({fmtDur(capacity)}).</p>
       </section>
     </div>
+  );
+}
+
+/** «¿Qué hago ahora?»: top suggestions with their reasons, no AI involved. */
+function NextUp() {
+  const wm = useWM();
+  const { subjects } = useSubjects();
+  const data = { tasks: useRows('tasks'), events: useRows('events'), topics: useRows('topics'), cards: useRows('cards'), slots: useRows('slots'), subjects };
+  const [open, setOpen] = useState(false);
+  const list = suggestNext(data);
+  return (
+    <section className="card nextup">
+      <h3>¿Qué hago ahora?</h3>
+      {!open ? (
+        <div className="nextup-cta">
+          <Btn primary onClick={() => setOpen(true)} disabled={!list.length}>▶ Sugiéreme qué hacer</Btn>
+          <span className="hint">{list.length ? 'Según tus fechas, temas pendientes y calificaciones.' : 'No hay nada urgente. ¡Buen momento para adelantar o descansar!'}</span>
+        </div>
+      ) : (
+        <ol className="nextup-list">
+          {list.slice(0, 3).map((s, i) => (
+            <li key={s.id} className={i === 0 ? 'top' : ''}>
+              <div className="grow">
+                <b>{s.title}</b>
+                <div className="hint">{s.why}</div>
+              </div>
+              <Btn small primary={i === 0} onClick={() => wm.open(s.action.app, s.action.props)}>{s.action.label}</Btn>
+            </li>
+          ))}
+          <li className="nextup-foot"><button className="link muted" onClick={() => setOpen(false)}>Ocultar</button></li>
+        </ol>
+      )}
+    </section>
+  );
+}
+
+const LETTERS = 'CDEFGHIJKLMNOPQRSTUVWXYZ';
+
+/** «Mi PC»: each subject as a drive whose "used space" is syllabus progress. */
+function Drives() {
+  const wm = useWM();
+  const { subjects } = useSubjects();
+  const topics = useRows('topics');
+  if (!subjects.length) return null;
+  return (
+    <section className="card drives">
+      <h3>Mi PC</h3>
+      <div className="drive-grid">
+        {subjects.map((s, i) => {
+          const ts = topics.filter((t) => t.subjectId === s.id);
+          const leaves = ts.filter((t) => !ts.some((c) => c.parentId === t.id));
+          const base = leaves.length ? leaves : ts;
+          const done = base.filter((t) => topicRank(t.status) >= topicRank('estudiado')).length;
+          const pct = base.length ? done / base.length : 0;
+          return (
+            <button key={s.id} className="drive" onClick={() => wm.open('subjects', { subjectId: s.id, tab: 'temario' })} title={`${done} de ${base.length} temas estudiados`}>
+              <span className="drive-icon">{s.icon || s.iconImage ? <SubjectIcon s={s} big /> : <Pixel sprite="floppy" scale={2} />}</span>
+              <span className="drive-info">
+                <b className="ellipsis">{s.name} ({LETTERS[i] ?? '?'}:)</b>
+                <span className="drive-bar"><i style={{ width: `${Math.round(pct * 100)}%`, background: s.color }} /></span>
+                <span className="hint">{base.length ? `${done} de ${base.length} temas estudiados` : 'Sin temario'}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }

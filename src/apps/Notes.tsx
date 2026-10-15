@@ -2,10 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { create, patch, remove, useRows, useSubjects, type ID, type Note } from '../db';
 import { norm } from '../lib/parse';
 import { Btn, Dot, Empty, Field, Input, Select, SubjectSelect } from '../os/ui';
-import { AiBadge, AiButton, useAiAction } from '../os/Ai';
+import { AiBadge, AiButton, useAiAction, useAiEnabled } from '../os/Ai';
+import { CopyForClaude, parseCardLines } from '../os/CopyForClaude';
+import { formatCards } from '../lib/formatCards';
 import { cardsFromNote, summarizeNote } from '../lib/aiFeatures';
 import { newCard } from './Cards';
 import { askConfirm } from '../os/dialogs';
+import { useWindowStatus } from '../os/status';
 
 export default function Notes({ noteId }: { noteId?: ID }) {
   const notes = useRows('notes');
@@ -20,6 +23,7 @@ export default function Notes({ noteId }: { noteId?: ID }) {
     .filter((n) => (!subject || n.subjectId === subject) && (!q || norm(`${n.title} ${n.body} ${n.tags.join(' ')}`).includes(norm(q))))
     .sort((a, b) => b.updatedAt - a.updatedAt);
   const sel = notes.find((n) => n.id === selId);
+  useWindowStatus([`${list.length} apunte${list.length === 1 ? '' : 's'}${q || subject ? ' (filtrados)' : ''}`, sel ? `${sel.body.trim() ? sel.body.trim().split(/\s+/).length : 0} palabras` : null]);
 
   return (
     <div className={`app split ${sel ? 'has-detail' : ''}`}>
@@ -54,6 +58,8 @@ function Editor({ note, onClose }: { note: Note; onClose: () => void }) {
   const timer = useRef<number>();
   const cardsAi = useAiAction<{ pregunta: string; respuesta: string }[]>();
   const sumAi = useAiAction<string>();
+  const [cardSource, setCardSource] = useState<'ia' | 'formato' | 'claude'>('ia');
+  const aiOn = useAiEnabled();
   const [picked, setPicked] = useState<Set<number>>(new Set());
   const [saved, setSaved] = useState(true);
 
@@ -91,16 +97,62 @@ function Editor({ note, onClose }: { note: Note; onClose: () => void }) {
       </div>
       <div className="toolbar">
         <AiButton busy={cardsAi.busy} disabled={body.trim().length < 40} title="Crear tarjetas de memoria con lo que escribiste" onClick={() => void cardsAi.run(async () => {
+          setCardSource('ia');
           const r = await cardsFromNote(title, body);
           setPicked(new Set(r.tarjetas.map((_, i) => i)));
           return r.tarjetas;
         })}>Crear tarjetas</AiButton>
         <AiButton busy={sumAi.busy} disabled={body.trim().length < 40} onClick={() => void sumAi.run(() => summarizeNote(title, body))}>Resumir</AiButton>
+        <Btn small disabled={!formatCards(body).length} title="Detecta líneas «Concepto: definición» en tu apunte" onClick={() => { const c = formatCards(body); setCardSource('formato'); setPicked(new Set(c.map((_, i) => i))); cardsAi.setResult(c); }}>
+          🃏 Tarjetas del apunte{formatCards(body).length ? ` (${formatCards(body).length})` : ''}
+        </Btn>
+        {!aiOn && (
+          <>
+            <CopyForClaude
+              label="Tarjetas con Claude"
+              title="Crear tarjetas con Claude"
+              disabled={body.trim().length < 40}
+              buildPrompt={() => `Crea entre 3 y 12 tarjetas de memoria usando SOLO la información de este apunte (no agregues datos que no estén). Responde únicamente con una tarjeta por línea, en este formato exacto:
+P: pregunta || R: respuesta corta
+
+Apunte «${title || 'Sin título'}»:
+${body}`}
+              pasteHint="Ejemplo: P: ¿Qué es DNS? || R: El sistema que traduce nombres de dominio a direcciones IP."
+              applyLabel="Revisar tarjetas"
+              onApply={(answer) => {
+                const c = parseCardLines(answer);
+                if (!c.length) return 'No encontré líneas con el formato «P: … || R: …». Revisa que hayas pegado la respuesta completa.';
+                setCardSource('claude');
+                setPicked(new Set(c.map((_, i) => i)));
+                cardsAi.setResult(c);
+              }}
+            />
+            <CopyForClaude
+              label="Resumen con Claude"
+              title="Resumir con Claude"
+              disabled={body.trim().length < 40}
+              buildPrompt={() => `Resume este apunte de clase en secciones: «Conceptos clave», «Dudas», «Tareas mencionadas» y «Temas para estudiar». Usa viñetas cortas e incluye solo lo que está en el texto; si una sección queda vacía, escribe «—».
+
+Apunte «${title || 'Sin título'}»:
+${body}`}
+              applyLabel="Agregar al apunte"
+              pasteHint="Pega el resumen de Claude: se agregará al final del apunte."
+              onApply={(answer) => {
+                const b = `${body}
+
+--- Resumen (Claude) ---
+${answer}`;
+                setBody(b);
+                void patch('notes', note.id, { title, body: b });
+              }}
+            />
+          </>
+        )}
       </div>
       {(cardsAi.error || sumAi.error) && <div className="warn">⚠ {cardsAi.error ?? sumAi.error}</div>}
       {cardsAi.result && (
         <div className="ai-box">
-          <AiBadge label={`${cardsAi.result.length} tarjetas sugeridas`} />
+          {cardSource === 'formato' ? <b>{cardsAi.result.length} tarjetas encontradas en tu apunte</b> : cardSource === 'claude' ? <b>{cardsAi.result.length} tarjetas de tu respuesta de Claude</b> : <AiBadge label={`${cardsAi.result.length} tarjetas sugeridas`} />}
           {cardsAi.result.length === 0 && <span className="hint">Este apunte no da para tarjetas todavía.</span>}
           {cardsAi.result.map((c, i) => (
             <label key={i} className="check">
@@ -110,7 +162,7 @@ function Editor({ note, onClose }: { note: Note; onClose: () => void }) {
           ))}
           <div className="row-btns">
             <Btn small primary disabled={!picked.size} onClick={async () => {
-              for (const [i, c] of cardsAi.result!.entries()) if (picked.has(i)) await newCard(c.pregunta, c.respuesta, note.subjectId, note.topicId, 'IA · apunte');
+              for (const [i, c] of cardsAi.result!.entries()) if (picked.has(i)) await newCard(c.pregunta, c.respuesta, note.subjectId, note.topicId, cardSource === 'formato' ? 'Apunte' : cardSource === 'claude' ? 'Claude · apunte' : 'IA · apunte');
               cardsAi.setResult(null);
             }}>Agregar {picked.size} a Tarjetas</Btn>
             <Btn small onClick={() => cardsAi.setResult(null)}>Descartar</Btn>
@@ -131,3 +183,4 @@ function Editor({ note, onClose }: { note: Note; onClose: () => void }) {
     </>
   );
 }
+

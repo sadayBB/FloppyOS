@@ -14,6 +14,7 @@ import Subjects from './Subjects';
 import Tasks from './Tasks';
 import Timer from './Timer';
 import Today from './Today';
+import Trash from './Trash';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const APP_COMPONENTS: Record<AppId, ComponentType<any>> = {
@@ -31,4 +32,5 @@ export const APP_COMPONENTS: Record<AppId, ComponentType<any>> = {
   projects: Projects,
   cards: Cards,
   ask: Ask,
+  trash: Trash,
 };

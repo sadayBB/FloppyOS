@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ThemeId } from '../App';
 import { DATA_TABLES, db, useLocal, useSetting } from '../db';
 import { downloadJSON, exportAll, mergeBackup } from '../lib/backup';
@@ -13,6 +13,7 @@ import type { AssistantId } from '../os/Assistant';
 import { Pixel } from '../pixel/Pixel';
 import { CatSprite, EYES, FURS, useCat, type CatLook } from '../pixel/cat';
 import { Btn, Field, Input, Select, Tabs } from '../os/ui';
+import { isPersisted, requestPersist } from '../lib/persist';
 import { AI_MODELS, getAiConfig, setAiConfig, testAi, type AiModel } from '../lib/ai';
 import { askConfirm } from '../os/dialogs';
 
@@ -20,6 +21,7 @@ type Tab = 'general' | 'look' | 'sync' | 'alerts' | 'ai' | 'privacy' | 'backup' 
 
 export default function Settings({ tab: initTab }: { tab?: Tab }) {
   const [tab, setTab] = useState<Tab>(initTab ?? 'look');
+  const [aiEnabled] = useSetting('aiEnabled', false);
   return (
     <div className="app">
       <Tabs<Tab>
@@ -29,7 +31,7 @@ export default function Settings({ tab: initTab }: { tab?: Tab }) {
           { id: 'look', label: 'Apariencia' },
           { id: 'general', label: 'Estudio' },
           { id: 'alerts', label: 'Avisos' },
-          { id: 'ai', label: 'IA' },
+          ...(aiEnabled ? [{ id: 'ai' as Tab, label: 'IA' }] : []),
           { id: 'privacy', label: 'Privacidad' },
           { id: 'sync', label: 'Sincronización' },
           { id: 'backup', label: 'Respaldo' },
@@ -109,6 +111,8 @@ function Look() {
         </div>
       )}
 
+      <h3>Efectos</h3>
+      <EffectToggles />
       <h3>Fondo de escritorio</h3>
       <p className="hint">El fondo se guarda solo en este dispositivo: puedes tener uno en la PC y otro en la tablet.</p>
       <div className="wp-grid">
@@ -196,12 +200,35 @@ function CatEditor() {
   );
 }
 
+function EffectToggles() {
+  const [sounds, setSounds] = useSetting('sounds', true);
+  const [boot, setBoot] = useSetting('bootScreen', true);
+  const [cursor, setCursor] = useSetting('pixelCursor', true);
+  return (
+    <div className="effect-toggles">
+      <label className="check"><input type="checkbox" checked={sounds} onChange={(e) => setSounds(e.target.checked)} /> Sonidos del sistema (inicio, avisos, fin del pomodoro)</label>
+      <label className="check"><input type="checkbox" checked={boot} onChange={(e) => setBoot(e.target.checked)} /> Pantalla de arranque al abrir FloppyOS</label>
+      <label className="check"><input type="checkbox" checked={cursor} onChange={(e) => setCursor(e.target.checked)} /> Cursores pixel art (en computadora)</label>
+    </div>
+  );
+}
+
 function NumberSetting({ k, def, label, unit }: { k: string; def: number; label: string; unit: string }) {
   const [v, set] = useSetting(k, def);
   return (
     <Field label={`${label} (${unit})`}>
       <Input type="number" min={0} value={v} onChange={(e) => set(Math.max(0, +e.target.value || 0))} />
     </Field>
+  );
+}
+
+function AiToggle() {
+  const [on, setOn] = useSetting('aiEnabled', false);
+  return (
+    <div className="wide">
+      <label className="check"><input type="checkbox" checked={on} onChange={(e) => setOn(e.target.checked)} /> Funciones con IA (requieren una clave de API de Claude con saldo)</label>
+      <p className="hint">Apagadas, se ocultan los botones ✨ y la app Pregúntale. Sin IA puedes usar «Copiar para Claude», que prepara el texto para pegarlo en claude.ai con tu suscripción.</p>
+    </div>
   );
 }
 
@@ -231,11 +258,48 @@ function General() {
       <NumberSetting k="breakMin" def={5} label="Descanso corto" unit="min" />
       <NumberSetting k="longBreakMin" def={15} label="Descanso largo (cada 4 bloques)" unit="min" />
       <GoogleBooksKey />
+      <AiToggle />
       <div className="wide">
         Notificaciones del sistema: <b>{perm === 'granted' ? 'activadas' : perm === 'denied' ? 'bloqueadas' : 'sin decidir'}</b>{' '}
         {perm === 'default' && <Btn small onClick={async () => setPerm(await Notification.requestPermission())}>Activar</Btn>}
         <p className="hint">Avisan al terminar un pomodoro mientras FloppyOS está abierto. Zona horaria: {Intl.DateTimeFormat().resolvedOptions().timeZone}.</p>
       </div>
+    </div>
+  );
+}
+
+/** «Guardar datos en este dispositivo»: persistent storage + how to avoid the browser wiping it. */
+function KeepDevice() {
+  const [persisted, setPersisted] = useState<boolean | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  useEffect(() => {
+    void isPersisted().then(setPersisted);
+  }, []);
+  const ask = async () => {
+    const ok = await requestPersist();
+    setPersisted(ok);
+    setMsg(ok ? null : 'El navegador no lo permitió todavía. En Firefox, acepta el aviso «almacenamiento persistente» si aparece; en Chrome, instala la app (menú ⋮ → Instalar app) y vuelve a intentarlo.');
+  };
+  return (
+    <div className={`keep-device ${persisted ? 'ok' : ''}`}>
+      {persisted ? (
+        <span>💾 Este dispositivo guarda tus datos de forma permanente.</span>
+      ) : (
+        <>
+          <span>💾 Pídele al navegador que no borre FloppyOS de este dispositivo.</span>
+          <Btn small primary onClick={() => void ask()}>Guardar datos en este dispositivo</Btn>
+        </>
+      )}
+      {msg && <p className="hint">{msg}</p>}
+      <details>
+        <summary className="hint">¿Se te borró la sesión al cerrar el navegador?</summary>
+        <ul className="hint">
+          <li><b>No uses ventana privada:</b> al cerrarla, el navegador borra todo.</li>
+          <li><b>Firefox:</b> Ajustes → Privacidad y seguridad → desmarca «Eliminar cookies y datos del sitio cuando se cierre Firefox», o en «Administrar excepciones» agrega <code>https://sadaybb.github.io</code> como «Permitir».</li>
+          <li><b>Chrome / tablet:</b> usa la app instalada desde el icono; no se borra al cerrarla.</li>
+          <li>Tus materias y tareas no se pierden si usas sincronización: al volver a iniciar sesión se descargan de nuevo.</li>
+        </ul>
+      </details>
     </div>
   );
 }
@@ -274,6 +338,7 @@ function Sync() {
 
   return (
     <div className="prose">
+      <KeepDevice />
       <p className={`sync-status ${sync.phase}`}>
         <b>{status[sync.phase]}</b>
         {sync.email && <><br />Cuenta: {sync.email}</>}

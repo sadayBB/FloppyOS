@@ -5,6 +5,7 @@ import { EVENT_KIND, isOpen } from '../lib/labels';
 import { Btn, Field, Input, LazyInput, Modal, Select, SubjectSelect, Tabs } from '../os/ui';
 import { isCompact, useWM } from '../os/wm';
 import { ReminderPicker } from '../os/ReminderPicker';
+import { StudyPlanModal } from './StudyPlan';
 
 type View = 'day' | 'week' | 'month';
 const H0 = 7;
@@ -195,6 +196,8 @@ function MonthGrid({ cursor, dayData, filter, capacity, onPick }: { cursor: stri
 function EventModal({ ev, onClose }: { ev: Partial<CalEvent>; onClose: () => void }) {
   const { subjects } = useSubjects();
   const [e, setE] = useState<Partial<CalEvent>>(ev);
+  const [planning, setPlanning] = useState(false);
+  if (planning && e.id) return <StudyPlanModal exam={e as CalEvent} onClose={onClose} />;
   const set = (c: Partial<CalEvent>) => setE((x) => ({ ...x, ...c }));
   const save = async () => {
     if (!e.title?.trim() || !e.date) return;
@@ -209,6 +212,7 @@ function EventModal({ ev, onClose }: { ev: Partial<CalEvent>; onClose: () => voi
       onClose={onClose}
       footer={<>
         {e.id && <Btn onClick={() => { void remove('events', e.id!); onClose(); }}>Eliminar</Btn>}
+        {e.id && e.kind === 'examen' && <Btn onClick={() => setPlanning(true)}>📚 Plan de repaso…</Btn>}
         <span className="grow" />
         <Btn onClick={onClose}>Cancelar</Btn>
         <Btn primary onClick={save} disabled={!e.title?.trim()}>Guardar</Btn>

@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
 import { APPS, type AppId } from '../apps/meta';
+import { animateMinimize, animateRestore } from './winAnim';
 
 export interface Win {
   id: string;
@@ -36,10 +37,12 @@ export function WMProvider({ children }: { children: ReactNode }) {
   const open = useCallback((appId: AppId, props?: Record<string, unknown>) => {
     setWins((ws) => {
       const ex = ws.find((w) => w.appId === appId);
-      if (ex)
+      if (ex) {
+        if (ex.minimized) animateRestore(ex.id);
         return ws.map((w) =>
           w.id === ex.id ? { ...w, props: props ?? w.props, minimized: false, z: ++z.current } : w,
         );
+      }
       const meta = APPS[appId];
       const vw = window.innerWidth;
       const vh = window.innerHeight - TASKBAR_H;
@@ -75,8 +78,12 @@ export function WMProvider({ children }: { children: ReactNode }) {
       open,
       topId: top?.id,
       close: (id) => setWins((ws) => ws.filter((w) => w.id !== id)),
-      focus: (id) => update(id, (w) => (w.z === z.current ? {} : { z: ++z.current, minimized: false })),
-      minimize: (id) => update(id, () => ({ minimized: true })),
+      focus: (id) => {
+        const w = wins.find((x) => x.id === id);
+        update(id, (cur) => (cur.z === z.current && !cur.minimized ? {} : { z: ++z.current, minimized: false }));
+        if (w?.minimized) animateRestore(id);
+      },
+      minimize: (id) => void animateMinimize(id).then(() => update(id, () => ({ minimized: true }))),
       toggleMax: (id) => update(id, (w) => ({ maximized: !w.maximized })),
       move: (id, r) => update(id, () => r),
     };

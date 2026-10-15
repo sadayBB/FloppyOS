@@ -1,4 +1,5 @@
-import { useRef, type PointerEvent as RPointerEvent, type ReactNode } from 'react';
+import { useRef, useState, type PointerEvent as RPointerEvent, type ReactNode } from 'react';
+import { StatusCtx } from './status';
 import { APPS } from '../apps/meta';
 import { useSetting } from '../db';
 import { Pixel } from '../pixel/Pixel';
@@ -11,6 +12,7 @@ export function Window({ win, children }: { win: Win; children: ReactNode }) {
   const active = wm.topId === win.id;
   const [colorTitles] = useSetting('colorTitles', true);
   const max = win.maximized || isCompact();
+  const [status, setStatus] = useState<string[] | null>(null);
 
   const onDown = (mode: 'move' | 'resize') => (e: RPointerEvent) => {
     if (max || (e.target as HTMLElement).closest('button')) return;
@@ -45,6 +47,7 @@ export function Window({ win, children }: { win: Win; children: ReactNode }) {
   return (
     <section
       className={`window ${active ? 'active' : ''} ${max ? 'max' : ''}`}
+      data-win={win.id}
       style={{
         ...style,
         display: win.minimized ? 'none' : undefined,
@@ -74,7 +77,14 @@ export function Window({ win, children }: { win: Win; children: ReactNode }) {
           <span className="glyph-x">×</span>
         </button>
       </header>
-      <div className="window-body">{children}</div>
+      <div className="window-body">
+        <StatusCtx.Provider value={setStatus}>{children}</StatusCtx.Provider>
+      </div>
+      {status && status.length > 0 && (
+        <footer className="statusbar">
+          {status.map((p, i) => <span key={i}>{p}</span>)}
+        </footer>
+      )}
       {!max && <div className="resize" onPointerDown={onDown('resize')} onPointerMove={onMove} onPointerUp={onUp} />}
     </section>
   );

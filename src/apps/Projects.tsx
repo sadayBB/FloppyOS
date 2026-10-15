@@ -7,6 +7,7 @@ import { useWM } from '../os/wm';
 import { toggleDone } from './Tasks';
 import { safeUrl } from '../lib/safeUrl';
 import { askConfirm } from '../os/dialogs';
+import { useWindowStatus } from '../os/status';
 
 type Tab = 'resumen' | 'tablero' | 'entrega' | 'bitacora';
 const BOARD: TaskStatus[] = ['pendiente', 'en_progreso', 'bloqueada', 'completada'];
@@ -29,6 +30,7 @@ export default function Projects({ projectId }: { projectId?: ID }) {
 
   const list = projects.filter((p) => showDone || p.status === 'activo' || p.status === 'pausado').sort((a, b) => (a.due ?? '9').localeCompare(b.due ?? '9'));
   const sel = projects.find((p) => p.id === selId);
+  useWindowStatus([`${projects.filter((p) => p.status === 'activo').length} proyectos activos`, sel ? `${projectProgress(sel, tasks).done}/${projectProgress(sel, tasks).total} completado` : null]);
 
   const add = async () => {
     const p = await create('projects', { title: 'Nuevo proyecto', members: [], status: 'activo', milestones: [], checklist: [], links: [], log: [], start: today() });

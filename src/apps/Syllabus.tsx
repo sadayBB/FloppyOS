@@ -4,7 +4,8 @@ import { TOPIC_STATUS, topicRank, topicStatus } from '../lib/labels';
 import { Btn, Empty, LazyInput, Modal } from '../os/ui';
 import { useWM } from '../os/wm';
 import { pdfToText } from '../lib/pdf';
-import { AiBadge, AiButton, useAiAction } from '../os/Ai';
+import { AiBadge, AiButton, useAiAction, useAiEnabled } from '../os/Ai';
+import { CopyForClaude } from '../os/CopyForClaude';
 import { structureSyllabus } from '../lib/aiFeatures';
 import { addReference } from './Bibliography';
 import { splitReferences } from '../lib/biblio';
@@ -163,6 +164,7 @@ function ImportModal({ subject, onClose }: { subject: Subject; onClose: () => vo
   const pdfInput = useRef<HTMLInputElement>(null);
   const ai = useAiAction<boolean>();
   const [fromAi, setFromAi] = useState(false);
+  const aiOn = useAiEnabled();
   const [pdfBusy, setPdfBusy] = useState<string | null>(null);
   const [pdfWarn, setPdfWarn] = useState<string | null>(null);
 
@@ -225,6 +227,29 @@ function ImportModal({ subject, onClose }: { subject: Subject; onClose: () => vo
             setFromAi(true);
             return true;
           })}>Estructurar con IA</AiButton>
+          {!aiOn && (
+            <CopyForClaude
+              label="Ordenar con Claude"
+              title="Ordenar el temario con Claude"
+              disabled={!text.trim()}
+              buildPrompt={() => `Ordena este programa de asignatura. Responde SOLO con el temario y la bibliografía, sin comentarios, con este formato:
+Unidad 1. Nombre de la unidad
+1.1 Tema
+1.1.1 Subtema
+(una línea por tema, copiando los títulos tal cual, sin inventar temas)
+Al final escribe «Bibliografía» y debajo cada referencia completa en una sola línea, separando «Básica:» y «Consulta:» si el programa las distingue.
+
+Programa:
+${text}`}
+              applyLabel="Analizar respuesta"
+              pasteHint="Pega el temario ordenado que te dio Claude."
+              onApply={(answer) => {
+                setText(answer);
+                setFromAi(false);
+                setDrafts(parseSyllabus(answer));
+              }}
+            />
+          )}
           <Btn primary disabled={!text.trim()} onClick={() => { setFromAi(false); setDrafts(parseSyllabus(text)); }}>Analizar</Btn>
         </>
       )}

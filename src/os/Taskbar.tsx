@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { APP_LIST, APPS } from '../apps/meta';
-import { useLocal, useRows } from '../db';
+import { useLocal, useRows, useSetting } from '../db';
 import { lockNow } from '../lib/lock';
 import { pad } from '../lib/dates';
 import { useSync } from '../lib/sync';
 import { fmtClock, remainingMs, useTimer } from '../lib/timer';
 import { Pixel } from '../pixel/Pixel';
 import { useWM } from './wm';
+import { Balloon, showBalloon } from './balloon';
+import { useRef } from 'react';
 
 function toggleFullscreen() {
   if (document.fullscreenElement) void document.exitFullscreen();
@@ -28,8 +30,20 @@ export function Taskbar({ assistantHidden, onShowAssistant }: { assistantHidden:
   const timer = useTimer();
   const inbox = useRows('inbox').filter((i) => !i.processed).length;
   const sync = useSync();
+  const [aiEnabled] = useSetting('aiEnabled', false);
   const [lockCfg] = useLocal<unknown>('lock', null);
   const locked = lockCfg != null;
+
+  // Tray balloons for connection changes.
+  const prevPhase = useRef(sync.phase);
+  useEffect(() => {
+    const prev = prevPhase.current;
+    prevPhase.current = sync.phase;
+    if (sync.phase === 'offline' && prev !== 'offline' && prev !== 'unconfigured')
+      showBalloon('Sin conexión', 'Puedes seguir usando FloppyOS: tus cambios se guardan aquí y se subirán al volver internet.', { icon: '⌁', sound: false });
+    if (sync.phase === 'idle' && prev === 'offline') showBalloon('Sincronizado', 'Volvió la conexión y tus cambios ya están en la nube.', { icon: '☁' });
+    if (sync.phase === 'error' && prev !== 'error') showBalloon('Problema al sincronizar', sync.error ?? 'Revisa Panel de control → Sincronización.', { icon: '⚠', onClick: () => wm.open('settings', { tab: 'sync' }) });
+  }, [sync.phase]);
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 15000);
@@ -60,7 +74,7 @@ export function Taskbar({ assistantHidden, onShowAssistant }: { assistantHidden:
             </span>
           </div>
           <div className="startmenu-items">
-            {APP_LIST.map((a) => (
+            {APP_LIST.filter((a) => a.id !== 'ask' || aiEnabled).map((a) => (
               <button key={a.id} role="menuitem" onClick={launch(() => wm.open(a.id))}>
                 <Pixel sprite={a.icon} scale={2} />
                 <span>{a.title}</span>
@@ -92,6 +106,7 @@ export function Taskbar({ assistantHidden, onShowAssistant }: { assistantHidden:
           </div>
         </div>
       )}
+      <Balloon />
       <footer className="taskbar">
         <button className={`start-btn ${start ? 'pressed' : ''}`} onClick={() => setStart((s) => !s)} aria-expanded={start}>
           <Pixel sprite="floppy" scale={1} />
@@ -102,6 +117,7 @@ export function Taskbar({ assistantHidden, onShowAssistant }: { assistantHidden:
             <button
               key={w.id}
               className={`task-btn ${wm.topId === w.id ? 'pressed' : ''}`}
+              data-taskbtn={w.id}
               onClick={() => (wm.topId === w.id ? wm.minimize(w.id) : wm.focus(w.id))}
             >
               <Pixel sprite={APPS[w.appId].icon} scale={1} />

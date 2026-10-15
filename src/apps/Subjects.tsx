@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { create, patch, remove, SUBJECT_COLORS, useActiveSemester, useRows, useSubjects, type ID, type SemesterStatus, type Slot, type SlotKind, type Subject } from '../db';
-import { addMonths, DAYS, fmtDate, relDay, today, WEEK_ORDER } from '../lib/dates';
-import { isOpen, SLOT_KIND } from '../lib/labels';
+import { addMonths, DAYS, fmtDate, relDay, today, toISO, WEEK_ORDER } from '../lib/dates';
+import { isOpen, SLOT_KIND, topicRank } from '../lib/labels';
 import { KIND_COLOR, KIND_LABEL } from '../lib/parse';
 import { Btn, Chip, Dot, Empty, Field, Input, LazyInput, Modal, Select, Tabs } from '../os/ui';
 import { useWM } from '../os/wm';
+import { ContextMenu } from '../os/ContextMenu';
 import { Pixel } from '../pixel/Pixel';
 import { STICKERS, stickerById } from '../pixel/stickers';
 import { StickerView, useCustom, useUnlocked } from '../lib/stickers';
@@ -14,6 +15,7 @@ import { stickerToIcon, SubjectIcon } from './SubjectIcon';
 import { GradesTab } from './Grades';
 import { Bibliography } from './Bibliography';
 import { askConfirm } from '../os/dialogs';
+import { useWindowStatus } from '../os/status';
 
 type Tab = 'info' | 'horario' | 'temario' | 'tareas' | 'clases' | 'notas' | 'calif' | 'biblio';
 
@@ -25,15 +27,27 @@ export default function Subjects({ subjectId, tab: initTab }: { subjectId?: ID; 
   const [semModal, setSemModal] = useState<'new' | 'edit' | null>(null);
 
   useEffect(() => { if (subjectId) setSelId(subjectId); }, [subjectId]);
-  useEffect(() => { if (initTab) setTab(initTab); }, [initTab]);
+  const [props, setProps] = useState<{ id: ID; tab: 'general' | 'horario' } | null>(null);
+  const [ctx, setCtx] = useState<{ x: number; y: number; id: ID } | null>(null);
+  useEffect(() => {
+    if (!initTab) return;
+    // «Datos» and «Horario» now live in the Properties dialog.
+    if ((initTab === 'info' || initTab === 'horario') && subjectId) {
+      setProps({ id: subjectId, tab: initTab === 'info' ? 'general' : 'horario' });
+      setTab('temario');
+    } else setTab(initTab);
+  }, [initTab, subjectId]);
 
   const sel = subjects.find((s) => s.id === selId);
+  const allTopics = useRows('topics');
+  const selTopics = sel ? allTopics.filter((t) => t.subjectId === sel.id) : [];
+  useWindowStatus([`${subjects.length} materia${subjects.length === 1 ? '' : 's'}`, sel ? `${selTopics.length} temas` : null, sel && selTopics.length ? `${Math.round((selTopics.filter((t) => topicRank(t.status) >= topicRank('estudiado')).length / selTopics.length) * 100)}% estudiado` : null]);
 
   const addSubject = async () => {
     if (!active) return setSemModal('new');
     const s = await create('subjects', { semesterId: active.id, name: 'Nueva materia', color: SUBJECT_COLORS[subjects.length % SUBJECT_COLORS.length] });
     setSelId(s.id);
-    setTab('info');
+    setProps({ id: s.id, tab: 'general' });
   };
 
   if (semesters.length === 0)
@@ -62,7 +76,7 @@ export default function Subjects({ subjectId, tab: initTab }: { subjectId?: ID; 
         </div>
         <hr />
         {subjects.map((s) => (
-          <button key={s.id} className={`side-item ${s.id === selId ? 'on' : ''}`} onClick={() => setSelId(s.id)}>
+          <button key={s.id} className={`side-item ${s.id === selId ? 'on' : ''}`} onClick={() => setSelId(s.id)} onContextMenu={(e) => { e.preventDefault(); setCtx({ x: e.clientX, y: e.clientY, id: s.id }); }}>
             <SubjectIcon s={s} /> {s.name}
           </button>
         ))}
@@ -79,7 +93,9 @@ export default function Subjects({ subjectId, tab: initTab }: { subjectId?: ID; 
               <SubjectIcon s={sel} big />
               <h2 className="subject-title">{sel.name}</h2>
               {sel.code && <Chip>{sel.code}</Chip>}
-              {sel.professor ? <span className="prof">👩‍🏫 {sel.professor}</span> : <button className="link muted" onClick={() => setTab('info')}>+ profesor/a</button>}
+              {sel.professor ? <span className="prof">👩‍🏫 {sel.professor}</span> : <button className="link muted" onClick={() => setProps({ id: sel.id, tab: 'general' })}>+ profesor/a</button>}
+              <span className="grow" />
+              <Btn small onClick={() => setProps({ id: sel.id, tab: 'general' })}>Propiedades…</Btn>
             </div>
             <Tabs<Tab>
               value={tab}
@@ -90,14 +106,10 @@ export default function Subjects({ subjectId, tab: initTab }: { subjectId?: ID; 
                 { id: 'biblio', label: 'Bibliografía' },
                 { id: 'clases', label: 'Clase' },
                 { id: 'tareas', label: 'Tareas' },
-                { id: 'horario', label: 'Horario' },
                 { id: 'notas', label: 'Apuntes' },
-                { id: 'info', label: 'Datos' },
               ]}
             />
             <div className="scroll tab-body">
-              {tab === 'info' && <SubjectInfo s={sel} onDeleted={() => setSelId(undefined)} />}
-              {tab === 'horario' && <Schedule s={sel} />}
               {tab === 'temario' && <Syllabus subject={sel} />}
               {tab === 'tareas' && <SubjectTasks s={sel} />}
               {tab === 'clases' && <ClassLog s={sel} />}
@@ -109,7 +121,30 @@ export default function Subjects({ subjectId, tab: initTab }: { subjectId?: ID; 
         )}
       </div>
       {semModal && <SemesterModal mode={semModal} onClose={() => setSemModal(null)} onCreated={(id) => setActiveId(id)} />}
+      {props && subjects.find((x) => x.id === props.id) && (
+        <SubjectProperties s={subjects.find((x) => x.id === props.id)!} tab={props.tab} onTab={(t) => setProps({ ...props, tab: t })} onClose={() => setProps(null)} onDeleted={() => { setProps(null); setSelId(undefined); }} />
+      )}
+      {ctx && (
+        <ContextMenu x={ctx.x} y={ctx.y} onClose={() => setCtx(null)} items={[
+          { label: 'Abrir', onClick: () => setSelId(ctx.id) },
+          { label: 'Horario…', onClick: () => setProps({ id: ctx.id, tab: 'horario' }) },
+          { label: '', separator: true },
+          { label: 'Propiedades', onClick: () => setProps({ id: ctx.id, tab: 'general' }) },
+        ]} />
+      )}
     </div>
+  );
+}
+
+/** Windows-style Properties dialog: general data and weekly schedule. Changes save as you type. */
+function SubjectProperties({ s, tab, onTab, onClose, onDeleted }: { s: Subject; tab: 'general' | 'horario'; onTab: (t: 'general' | 'horario') => void; onClose: () => void; onDeleted: () => void }) {
+  return (
+    <Modal title={`Propiedades de ${s.name}`} onClose={onClose} footer={<Btn primary onClick={onClose}>Aceptar</Btn>}>
+      <Tabs<'general' | 'horario'> value={tab} onChange={onTab} tabs={[{ id: 'general', label: 'General' }, { id: 'horario', label: 'Horario' }]} />
+      <div className="tab-body props-body">
+        {tab === 'general' ? <SubjectInfo s={s} onDeleted={onDeleted} /> : <Schedule s={s} />}
+      </div>
+    </Modal>
   );
 }
 
@@ -226,6 +261,7 @@ function ClassLog({ s }: { s: Subject }) {
   const items = useRows('inbox').filter((i) => i.subjectId === s.id && ['palabra', 'duda', 'nota', 'idea'].includes(i.kind));
   const [text, setText] = useState('');
   const [kind, setKind] = useState<'palabra' | 'duda' | 'nota'>('palabra');
+  const [summaryDay, setSummaryDay] = useState<string | null>(null);
   const byDay = new Map<string, typeof items>();
   for (const i of items.sort((a, b) => b.createdAt - a.createdAt)) {
     const d = new Date(i.createdAt);
@@ -252,7 +288,7 @@ function ClassLog({ s }: { s: Subject }) {
       {byDay.size === 0 && <Empty>Todavía no has registrado nada de esta materia.</Empty>}
       {[...byDay.entries()].map(([day, list]) => (
         <div key={day} className="day-group">
-          <div className="section-title">{fmtDate(day)}</div>
+          <div className="section-title day-head">{fmtDate(day)} <button className="link" onClick={() => setSummaryDay(day)}>📄 Resumen</button></div>
           <div className="chips-wrap">
             {list.map((i) => (
               <span key={i.id} className={`chip ${i.resolved ? 'strike' : ''}`} style={{ borderColor: KIND_COLOR[i.kind], background: `${KIND_COLOR[i.kind]}33` }} title={KIND_LABEL[i.kind]}>
@@ -263,6 +299,7 @@ function ClassLog({ s }: { s: Subject }) {
           </div>
         </div>
       ))}
+      {summaryDay && <ClassSummary s={s} day={summaryDay} onClose={() => setSummaryDay(null)} />}
     </div>
   );
 }
@@ -314,5 +351,32 @@ function StickerPicker({ s, onChange }: { s: Subject; onChange: (c: Partial<Subj
       {s.iconImage && <span className="swatch-sticker on" title="Sticker propio elegido"><img src={s.iconImage} alt="" width={34} height={34} style={{ imageRendering: 'pixelated' }} /></span>}
       <span className="hint">{custom.length ? 'Incluye tus stickers subidos.' : 'Sube tus propios stickers en el álbum de Stickers.'}</span>
     </div>
+  );
+}
+
+/** Day summary built from what was registered (RF-36), no AI: concepts, questions, notes, tasks, topics. */
+function ClassSummary({ s, day, onClose }: { s: Subject; day: string; onClose: () => void }) {
+  const inbox = useRows('inbox').filter((i) => i.subjectId === s.id && toISO(new Date(i.createdAt)) === day);
+  const tasks = useRows('tasks').filter((t) => t.subjectId === s.id && toISO(new Date(t.createdAt)) === day);
+  const topics = useRows('topics').filter((t) => t.subjectId === s.id && t.statusChangedAt && toISO(new Date(t.statusChangedAt)) === day);
+  const [saved, setSaved] = useState(false);
+  const sections: [string, string[]][] = [
+    ['Temas vistos', topics.map((t) => t.title)],
+    ['Conceptos clave', inbox.filter((i) => i.kind === 'palabra').map((i) => i.text)],
+    ['Dudas', inbox.filter((i) => i.kind === 'duda').map((i) => `${i.text}${i.resolved ? ' (resuelta)' : ''}`)],
+    ['Notas', inbox.filter((i) => i.kind === 'nota' || i.kind === 'idea').map((i) => i.text)],
+    ['Tareas que surgieron', tasks.map((t) => `${t.title}${t.due ? ` (para ${fmtDate(t.due)})` : ''}`)],
+  ];
+  const text = `Clase de ${s.name} — ${fmtDate(day)}\n\n` + sections.map(([h, xs]) => `${h}:\n${xs.length ? xs.map((x) => `• ${x}`).join('\n') : '—'}`).join('\n\n');
+  return (
+    <Modal title={`Resumen de la clase · ${fmtDate(day)}`} onClose={onClose} footer={<><Btn onClick={onClose}>Cerrar</Btn><Btn primary disabled={saved} onClick={async () => { await create('notes', { title: `Clase ${fmtDate(day)} — ${s.name}`, body: text, subjectId: s.id, tags: ['clase'] }); setSaved(true); }}>{saved ? '✓ Guardado en Apuntes' : 'Guardar como apunte'}</Btn></>}>
+      {sections.map(([h, xs]) => (
+        <div key={h} className="sum-section">
+          <div className="section-title">{h}</div>
+          {xs.length ? <ul className="plain">{xs.map((x, i) => <li key={i}>• {x}</li>)}</ul> : <p className="hint">—</p>}
+        </div>
+      ))}
+      <p className="hint">Armado con lo que registraste ese día (palabras clave, dudas, notas, tareas y temas que cambiaron de estado).</p>
+    </Modal>
   );
 }

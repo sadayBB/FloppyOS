@@ -3,6 +3,7 @@ import { create, patch, remove, useRows, useSubjects, type Flashcard, type ID } 
 import { addDays, relDay, today } from '../lib/dates';
 import { topicRank } from '../lib/labels';
 import { Btn, Chip, Empty, Field, LazyInput, Select, SubjectSelect, Tabs } from '../os/ui';
+import { useWindowStatus } from '../os/status';
 
 type Grade = 0 | 1 | 2 | 3;
 const GRADES: { g: Grade; label: string; cls: string }[] = [
@@ -51,6 +52,7 @@ export default function Cards({ subjectId: initSubject }: { subjectId?: ID }) {
   const [subject, setSubject] = useState<ID | undefined>(initSubject);
   const pool = cards.filter((c) => !subject || c.subjectId === subject);
   const due = pool.filter((c) => c.due <= today());
+  useWindowStatus([`${pool.length} tarjetas`, `${due.length} para repasar hoy`]);
 
   return (
     <div className="app">

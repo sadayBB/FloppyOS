@@ -1,6 +1,7 @@
 import { createClient, type Session, type SupabaseClient } from '@supabase/supabase-js';
 import { useSyncExternalStore } from 'react';
 import { DATA_TABLES, db, onLocalChange, type Base, type Setting } from '../db';
+import { requestPersist } from './persist';
 
 /*
  * Offline-first sync with Supabase.
@@ -146,6 +147,7 @@ export async function signIn(email: string, password: string) {
   if (!client) throw new Error('Configura primero la URL y la clave de Supabase.');
   const { error } = await client.auth.signInWithPassword({ email: cleanEmail(email), password });
   if (error) throw new Error(error.message === 'Email not confirmed' ? 'Falta confirmar tu correo: abre el enlace que te mandó Supabase.' : error.message === 'Invalid login credentials' ? 'Correo o contraseña incorrectos.' : error.message);
+  void requestPersist(); // keep the session and data on this device
   await syncNow();
 }
 export async function signUp(email: string, password: string) {

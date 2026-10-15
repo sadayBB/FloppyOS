@@ -2,10 +2,14 @@ import { useEffect, useRef, useState, type PointerEvent as RPointerEvent } from 
 import { useLiveQuery } from 'dexie-react-hooks';
 import { APP_LIST, type AppId } from './apps/meta';
 import { APP_COMPONENTS } from './apps/registry';
-import { db, useSetting } from './db';
+import { create, db, useSetting } from './db';
 import type { LockConfig } from './lib/lock';
 import { LockScreen } from './os/LockScreen';
 import { DialogHost } from './os/dialogs';
+import { BootScreen } from './os/BootScreen';
+import { ContextMenu } from './os/ContextMenu';
+import { useTrash } from './apps/Trash';
+import { applyPixelCursors } from './lib/cursors';
 import { init as initSync } from './lib/sync';
 import { useWallpaperCss } from './lib/wallpaper';
 import { useReminderEngine } from './lib/reminders';
@@ -21,10 +25,15 @@ export type ThemeId = 'lavanda' | 'rosa' | 'noche' | 'teal98' | 'clasico';
 function Desktop() {
   const wm = useWM();
   const [selected, setSelected] = useState<AppId | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const trashCount = useTrash()?.length ?? 0;
   const [assistant, setAssistant] = useSetting<AssistantId | 'rover' | 'none'>('assistant', 'cat');
   const [theme] = useSetting<ThemeId>('theme', 'lavanda');
   const [titleColor] = useSetting<string | null>('titleColor', null);
+  const [pixelCursor] = useSetting('pixelCursor', true);
+  useEffect(() => applyPixelCursors(pixelCursor), [pixelCursor]);
   const [dots] = useSetting('desktopDots', true);
+  const [aiEnabled] = useSetting('aiEnabled', false);
   const wallpaper = useWallpaperCss();
   useReminderEngine();
   const [, force] = useState(0);
@@ -59,11 +68,39 @@ function Desktop() {
   };
 
   return (
-    <div className="desktop" style={wallpaper} onPointerDown={(e) => e.target === e.currentTarget && setSelected(null)}>
+    <div
+      className="desktop"
+      style={wallpaper}
+      onPointerDown={(e) => e.target === e.currentTarget && setSelected(null)}
+      onContextMenu={(e) => {
+        const t = e.target as HTMLElement;
+        if (t !== e.currentTarget && !t.classList.contains('desk-dots') && !t.classList.contains('icons')) return;
+        e.preventDefault();
+        setMenu({ x: e.clientX, y: e.clientY });
+      }}
+    >
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          onClose={() => setMenu(null)}
+          items={[
+            { label: 'Nueva tarea', onClick: async () => { const t = await create('tasks', { title: 'Nueva tarea', status: 'pendiente', priority: 2, tags: [], subtasks: [] }); wm.open('tasks', { taskId: t.id }); } },
+            { label: 'Nuevo apunte', onClick: async () => { const n = await create('notes', { title: '', body: '', tags: [] }); wm.open('notes', { noteId: n.id }); } },
+            { label: 'Anotar algo rápido…', onClick: () => wm.open('inbox') },
+            { label: '', separator: true },
+            { label: 'Pegar un sticker…', onClick: () => wm.open('stickers') },
+            { label: 'Cambiar fondo de pantalla…', onClick: () => wm.open('settings', { tab: 'look' }) },
+            { label: 'Papelera de reciclaje', onClick: () => wm.open('trash') },
+            { label: '', separator: true },
+            { label: 'Propiedades', onClick: () => wm.open('settings', { tab: 'look' }) },
+          ]}
+        />
+      )}
       {dots && !wallpaper.background && <div className="desk-dots" aria-hidden="true" />}
       <DesktopStickers />
       <div className="icons">
-        {APP_LIST.filter((a) => a.desktop).map((a) => (
+        {APP_LIST.filter((a) => a.desktop && (a.id !== 'ask' || aiEnabled)).map((a) => (
           <button
             key={a.id}
             className={`desk-icon ${selected === a.id ? 'sel' : ''}`}
@@ -72,7 +109,7 @@ function Desktop() {
             onDoubleClick={() => wm.open(a.id)}
             onKeyDown={(e) => e.key === 'Enter' && wm.open(a.id)}
           >
-            <Pixel sprite={a.icon} scale={3} />
+            <Pixel sprite={a.id === 'trash' && trashCount ? 'trashFull' : a.icon} scale={3} />
             <span>{a.title}</span>
           </button>
         ))}
@@ -97,6 +134,8 @@ export default function App() {
   // undefined while loading → render nothing, so the desktop never flashes before the lock appears.
   const lock = useLiveQuery(async () => ((await db.local.get('lock'))?.value as LockConfig | undefined) ?? null);
   const [unlocked, setUnlocked] = useState(false);
+  const [booted, setBooted] = useState(() => sessionStorage.getItem('floppyos.booted') === '1');
+  const [bootOn] = useSetting('bootScreen', true);
   const last = useRef(Date.now());
 
   useEffect(() => {
@@ -122,6 +161,7 @@ export default function App() {
   }, [lock?.autoLockMin]);
 
   if (lock === undefined) return null;
+  if (!booted && bootOn) return <BootScreen onDone={() => { sessionStorage.setItem('floppyos.booted', '1'); setBooted(true); }} />;
   if (lock && !unlocked) return <LockScreen cfg={lock} onUnlock={() => { last.current = Date.now(); setUnlocked(true); }} />;
   return (
     <WMProvider>

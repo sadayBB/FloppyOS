@@ -1,5 +1,6 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { Pixel } from '../pixel/Pixel';
+import { playSound } from '../lib/sounds';
 
 /*
  * Windows-2000-style message boxes that replace the browser's confirm()/alert().
@@ -29,6 +30,7 @@ const emit = () => listeners.forEach((l) => l());
 function open(req: Omit<DialogReq, 'id' | 'resolve'>) {
   return new Promise<boolean>((resolve) => {
     queue = [...queue, { ...req, id: ++seq, resolve }];
+    playSound(req.kind === 'error' ? 'error' : 'ding');
     emit();
   });
 }

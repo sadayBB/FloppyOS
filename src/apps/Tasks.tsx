@@ -6,8 +6,11 @@ import { parseCapture } from '../lib/parse';
 import { Btn, Chip, Dot, Empty, Field, Input, LazyInput, Progress, Select, SubjectSelect } from '../os/ui';
 import { useWM } from '../os/wm';
 import { ReminderPicker } from '../os/ReminderPicker';
-import { AiBadge, AiButton, useAiAction } from '../os/Ai';
+import { AiBadge, AiButton, useAiAction, useAiEnabled } from '../os/Ai';
+import { CopyForClaude, parseListLines } from '../os/CopyForClaude';
+import { TASK_TEMPLATES } from '../lib/taskTemplates';
 import { suggestSubtasks } from '../lib/aiFeatures';
+import { useWindowStatus } from '../os/status';
 
 type Filter = 'today' | 'week' | 'overdue' | 'nodate' | 'open' | 'done';
 const FILTERS: { id: Filter; label: string }[] = [
@@ -70,6 +73,9 @@ export default function Tasks({ filter: initFilter, taskId }: { filter?: Filter;
     .filter((t) => matchFilter(t, filter) && (!subject || t.subjectId === subject))
     .sort((a, b) => (a.due ?? '9999').localeCompare(b.due ?? '9999') || b.priority - a.priority);
   const sel = tasks.find((t) => t.id === selId);
+  const openCount = tasks.filter((t) => isOpen(t.status)).length;
+  const lateCount = tasks.filter((t) => matchFilter(t, 'overdue')).length;
+  useWindowStatus([`${list.length} en esta vista`, `${openCount} pendientes`, lateCount > 0 && `${lateCount} vencida${lateCount > 1 ? 's' : ''}`]);
   const subOf = (id?: ID) => subjects.find((s) => s.id === id);
 
   const addQuick = async () => {
@@ -141,6 +147,7 @@ function TaskDetail({ task: t, tasks, onClose }: { task: Task; tasks: Task[]; on
   const [step, setStep] = useState('');
   const ai = useAiAction<{ pasos: string[]; explicacion: string }>();
   const [picked, setPicked] = useState<Set<number>>(new Set());
+  const aiOn = useAiEnabled();
   const set = (c: Partial<Task>) => void patch('tasks', t.id, c);
   const dep = tasks.find((x) => x.id === t.dependsOn);
   const doneSteps = t.subtasks.filter((s) => s.done).length;
@@ -231,10 +238,36 @@ function TaskDetail({ task: t, tasks, onClose }: { task: Task; tasks: Task[]; on
               return r;
             })}>Sugerir pasos</AiButton>
           </form>
+          <div className="toolbar">
+            <Select value="" aria-label="Plantilla de pasos" onChange={(e) => {
+              const tpl = TASK_TEMPLATES.find((x) => x.id === e.target.value);
+              if (!tpl) return;
+              setPicked(new Set(tpl.steps.map((_, i) => i)));
+              ai.setResult({ pasos: tpl.steps, explicacion: `Pasos típicos de «${tpl.name}». Quita los que no apliquen.` });
+            }}>
+              <option value="">Plantilla de pasos…</option>
+              {TASK_TEMPLATES.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+            </Select>
+            {!aiOn && (
+              <CopyForClaude
+                label="Pasos con Claude"
+                title="Dividir la tarea con Claude"
+                buildPrompt={() => `Divide esta tarea universitaria en 3 a 8 pasos concretos, cortos y accionables, en orden. Responde solo con la lista, un paso por línea.\nTarea: ${t.title}${t.subjectId ? `\nMateria: ${subjects.find((x) => x.id === t.subjectId)?.name ?? ''}` : ''}${t.description ? `\nDescripción: ${t.description}` : ''}${t.subtasks.length ? `\nPasos que ya tiene (no los repitas): ${t.subtasks.map((x) => x.title).join('; ')}` : ''}`}
+                applyLabel="Revisar pasos"
+                pasteHint="Pega la lista de pasos que te dio Claude."
+                onApply={(answer) => {
+                  const pasos = parseListLines(answer).slice(0, 15);
+                  if (!pasos.length) return 'No encontré pasos en la respuesta.';
+                  setPicked(new Set(pasos.map((_, i) => i)));
+                  ai.setResult({ pasos, explicacion: 'Pasos de tu respuesta de Claude.' });
+                }}
+              />
+            )}
+          </div>
           {ai.error && <div className="warn">⚠ {ai.error}</div>}
           {ai.result && (
             <div className="ai-box">
-              <div><AiBadge /> <span className="hint">{ai.result.explicacion}</span></div>
+              <div>{ai.result.explicacion.startsWith('Pasos') ? null : <AiBadge />} <span className="hint">{ai.result.explicacion}</span></div>
               {ai.result.pasos.map((p, i) => (
                 <label key={i} className="check">
                   <input type="checkbox" checked={picked.has(i)} onChange={() => setPicked((s) => { const n = new Set(s); if (n.has(i)) n.delete(i); else n.add(i); return n; })} />
