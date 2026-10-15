@@ -121,7 +121,7 @@ export function Bibliography({ subject }: { subject: Subject }) {
                 {r.isbn && <span>· ISBN {r.isbn}</span>}
               </div>
               <div className="row-meta">
-                <Chip color={VERIFY_LABEL[r.verify].color} title={r.source.checkedAt ? `Verificada ${new Date(r.source.checkedAt).toLocaleDateString()}` : undefined}>{VERIFY_LABEL[r.verify].label}</Chip>
+                <span className={`verify-tag ${r.verify}`} title={r.verify === 'no_encontrada' ? 'No apareció en Open Library, Google Books ni Crossref. No significa que esté mal: muchas ediciones locales no están en catálogos en línea.' : r.source.checkedAt ? `Revisada el ${new Date(r.source.checkedAt).toLocaleDateString()}` : 'Aún no se ha buscado en línea'}>{VERIFY_LABEL[r.verify].label}</span>
                 <select className="kind-select" value={r.kind} onChange={(e) => void patch('refs', r.id, { kind: e.target.value as RefKind })} aria-label="Tipo">
                   {Object.entries(KIND).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
                 </select>

@@ -108,3 +108,8 @@
   .grades-table thead { display: none; }
   .grades-table tr { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; padding: 4px 0; border-bottom: 1px dotted var(--sh); }
 }
+
+.verify-tag { font-size: 12px; padding: 0 6px; border: 1px solid transparent; white-space: nowrap; }
+.verify-tag.confirmada { color: #1f7a45; border-color: #2e9d5b; background: rgba(46, 157, 91, 0.12); }
+.verify-tag.probable { color: #8a5a10; border-color: #d9a24e; background: rgba(217, 162, 78, 0.14); }
+.verify-tag.no_encontrada, .verify-tag.no_verificada { color: var(--ink-soft); }
