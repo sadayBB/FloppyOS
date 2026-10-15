@@ -1,4 +1,4 @@
-import type { Reference, RefVerify } from '../db';
+import { db, type Reference, type RefVerify } from '../db';
 import { norm } from './parse';
 
 const EDITION = /\(?\s*(\d+\s*(?:ª|º|a|st|nd|rd|th)?\.?\s*(?:ed\.?|edici[oó]n|edition))\s*\)?/i;
@@ -71,25 +71,30 @@ function parseIds(line: string) {
  * wrapped lines are joined back, and «Básica / Consulta» headers set the kind.
  */
 export function splitReferences(text: string): { raw: string; kind: Reference['kind'] }[] {
+  type Item = { raw: string; kind: Reference['kind']; closed?: boolean };
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   const numbered = lines.some((l) => /^(\d+[.)]|[-•*·])\s+/.test(l));
   let kind: Reference['kind'] = 'obligatoria';
-  const out: { raw: string; kind: Reference['kind'] }[] = [];
+  const out: Item[] = [];
   for (const l of lines) {
     const header = l.match(/^(b[aá]sica|obligatoria|principal|consulta|complementaria|recomendada|adicional)s?\s*:?$/i);
     if (header) {
+      if (out.length) out[out.length - 1].closed = true;
       kind = /^(b[aá]sica|obligatoria|principal)/i.test(header[1]) ? 'obligatoria' : /recomendada/i.test(header[1]) ? 'recomendada' : 'complementaria';
       continue;
     }
     if (/^bibliograf[ií]a/i.test(l)) continue;
-    if (!numbered || /^(\d+[.)]|[-•*·])\s+/.test(l) || !out.length) out.push({ raw: l, kind });
+    const prev = out[out.length - 1];
+    // Without numbering, a reference ends at its year («…, MIT Press, 2002.»); until then, lines are continuations.
+    const prevOpen = !!prev && !prev.closed && !/\b(1[89]\d{2}|20\d{2})\b[)\].]*\s*$/.test(prev.raw);
+    const startsNew = numbered ? /^(\d+[.)]|[-•*·])\s+/.test(l) : !prevOpen;
+    if (startsNew || !prev) out.push({ raw: l, kind });
     else {
-      const prev = out[out.length - 1];
       // A word cut with a hyphen at the end of a PDF line is joined back ("Addison-" + "Wesley").
       prev.raw = /[A-Za-zÀ-ÿ]-$/.test(prev.raw) ? prev.raw + l : `${prev.raw} ${l}`;
     }
   }
-  return out;
+  return out.map(({ raw, kind }) => ({ raw, kind }));
 }
 
 function parseClassic(rest: string, out: Partial<Reference>, line: string): Partial<Reference> {
@@ -164,7 +169,7 @@ export function similarity(a: string, b: string) {
 const surnames = (authors?: string) => [...tokens(authors ?? '')].filter((w) => w.length > 3);
 
 export interface Candidate {
-  origin: 'openlibrary' | 'crossref';
+  origin: 'openlibrary' | 'crossref' | 'googlebooks';
   title: string;
   authors?: string;
   year?: string;
@@ -253,10 +258,44 @@ async function crossref(ref: Partial<Reference>): Promise<Candidate | null> {
   return m ? judge(ref, fromItem(m), false) : null;
 }
 
-/** Looks the reference up in Open Library and Crossref; returns the best candidate or null. */
+interface GVolume {
+  volumeInfo: { title: string; subtitle?: string; authors?: string[]; publisher?: string; publishedDate?: string; industryIdentifiers?: { type: string; identifier: string }[]; infoLink?: string };
+  accessInfo?: { viewability?: string; publicDomain?: boolean; webReaderLink?: string };
+}
+async function googleBooks(ref: Partial<Reference>): Promise<Candidate | null> {
+  const author = surnames(ref.authors)[0];
+  const title = (ref.title ?? '').split(/[:;(]/)[0].split(/\s+/).slice(0, 10).join(' ');
+  const qs = ref.isbn ? [`isbn:${ref.isbn}`] : [`intitle:${title}${author ? ` inauthor:${author}` : ''}`, `${title} ${author ?? ''}`.trim()];
+  let items: GVolume[] = [];
+  for (const q of qs) {
+    // Without a key Google shares a small global daily quota (429 when exhausted); an optional free key avoids it.
+    const key = (await db.settings.get('googleBooksKey'))?.value as string | undefined;
+    const data = await getJSON(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=5&printType=books${key ? `&key=${encodeURIComponent(key)}` : ''}`);
+    items = data.items ?? [];
+    if (items.length) break;
+  }
+  if (!items.length) return null;
+  const full = (v: GVolume) => [v.volumeInfo.title, v.volumeInfo.subtitle].filter(Boolean).join(': ');
+  const score = (v: GVolume) => similarity(ref.title ?? '', full(v)) + (author && [...tokens(v.volumeInfo.authors?.join(' ') ?? '')].some((t) => wordsMatch(author, t)) ? 0.5 : 0);
+  const v = [...items].sort((a, b) => score(b) - score(a))[0];
+  const ids = v.volumeInfo.industryIdentifiers ?? [];
+  return judge(ref, {
+    origin: 'googlebooks',
+    title: full(v),
+    authors: v.volumeInfo.authors?.join(', '),
+    year: v.volumeInfo.publishedDate?.slice(0, 4),
+    publisher: v.volumeInfo.publisher,
+    isbn: ref.isbn ?? ids.find((i) => i.type === 'ISBN_13')?.identifier ?? ids.find((i) => i.type === 'ISBN_10')?.identifier,
+    url: v.volumeInfo.infoLink ?? `https://books.google.com/books?q=${encodeURIComponent(full(v))}`,
+    openAccess: v.accessInfo?.publicDomain && v.accessInfo.webReaderLink ? v.accessInfo.webReaderLink : undefined,
+  }, !!ref.isbn && ids.some((i) => i.identifier === ref.isbn));
+}
+
+/** Looks the reference up in Open Library, Google Books and Crossref; returns the best candidate or null. */
 export async function verifyReference(ref: Partial<Reference>): Promise<Candidate | null> {
   if (!navigator.onLine) throw new Error('Necesitas internet para verificar referencias.');
-  const order = ref.doi ? [crossref, openLibrary] : [openLibrary, crossref];
+  // Books first (most syllabus references are books); Crossref mainly covers articles and DOIs.
+  const order = ref.doi ? [crossref, openLibrary, googleBooks] : [openLibrary, googleBooks, crossref];
   const rank: Record<RefVerify, number> = { confirmada: 3, probable: 2, no_encontrada: 1, no_verificada: 0 };
   let best: Candidate | null = null;
   for (const fn of order) {

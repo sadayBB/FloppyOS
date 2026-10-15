@@ -95,7 +95,7 @@ export function Bibliography({ subject }: { subject: Subject }) {
   return (
     <div className="biblio">
       <form className="capture biblio-add" onSubmit={(e) => { e.preventDefault(); void addMany(); }}>
-        <textarea className="input" rows={raw.includes('\n') ? 6 : 2} value={raw} onChange={(e) => setRaw(e.target.value)} placeholder={'Pega una o varias referencias (puedes copiar la lista completa del programa, con «Básica:» y «Consulta:»).\nEj.: An introduction to genetic algorithm, Mitchel, M., MIT Press, 2006.'} aria-label="Nuevas referencias" />
+        <textarea className="input" rows={3} value={raw} onChange={(e) => setRaw(e.target.value)} placeholder={'Pega una o varias referencias (puedes copiar la lista completa del programa, con «Básica:» y «Consulta:»).\nEj.: An introduction to genetic algorithm, Mitchel, M., MIT Press, 2006.'} aria-label="Nuevas referencias" />
         <Btn type="submit" disabled={!raw.trim()}>Agregar</Btn>
       </form>
       <div className="toolbar">
@@ -103,7 +103,7 @@ export function Bibliography({ subject }: { subject: Subject }) {
         <Btn small disabled={!!busy || !refs.some((r) => r.raw && r.verify !== 'confirmada')} title="Vuelve a separar título, autor, editorial y año a partir del texto original" onClick={() => void reparse()}>Volver a leer</Btn>
         {busy && busy.startsWith('Verif') && <span className="hint">{busy}</span>}
         <span className="grow" />
-        <span className="hint">Fuentes: Open Library y Crossref (requiere internet)</span>
+        <span className="hint">Fuentes: Open Library, Google Books y Crossref (requiere internet)</span>
       </div>
       {msg && <div className="warn">⚠ {msg}</div>}
       {!refs.length && <Empty>Sin bibliografía. Pégala aquí o impórtala junto con el temario.</Empty>}
@@ -205,8 +205,8 @@ function ReviewModal({ review: { ref, cand }, onClose }: { review: { ref: Refere
       isbn: pick(ref.isbn, cand.isbn),
       doi: pick(ref.doi, cand.doi),
       verify: cand.verdict,
-      links: [...(ref.links ?? []).filter((l) => l.url !== cand.url && l.url !== cand.openAccess), { label: cand.origin === 'openlibrary' ? 'Open Library' : 'Crossref', url: cand.url }, ...(cand.openAccess ? [{ label: '📖 Leer gratis (Internet Archive)', url: cand.openAccess }] : [])],
-      source: { origin: cand.origin, detail: `Datos completados desde ${cand.origin === 'openlibrary' ? 'Open Library' : 'Crossref'} (${cand.why})`, checkedAt: Date.now() },
+      links: [...(ref.links ?? []).filter((l) => l.url !== cand.url && l.url !== cand.openAccess), { label: cand.origin === 'openlibrary' ? 'Open Library' : cand.origin === 'googlebooks' ? 'Google Books' : 'Crossref', url: cand.url }, ...(cand.openAccess ? [{ label: '📖 Leer gratis (Internet Archive)', url: cand.openAccess }] : [])],
+      source: { origin: cand.origin, detail: `Datos completados desde ${cand.origin === 'openlibrary' ? 'Open Library' : cand.origin === 'googlebooks' ? 'Google Books' : 'Crossref'} (${cand.why})`, checkedAt: Date.now() },
     });
     onClose();
   };

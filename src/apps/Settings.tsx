@@ -204,6 +204,22 @@ function NumberSetting({ k, def, label, unit }: { k: string; def: number; label:
   );
 }
 
+function GoogleBooksKey() {
+  const [key, setKey] = useSetting<string>('googleBooksKey', '');
+  const [v, setV] = useState(key);
+  return (
+    <div className="wide">
+      <Field label="Clave de Google Books (opcional, para verificar bibliografía)">
+        <div className="capture">
+          <Input type="password" autoComplete="off" value={v} placeholder={key ? '•••••••• (guardada)' : 'AIza…'} onChange={(e) => setV(e.target.value.trim())} />
+          <Btn small disabled={v === key} onClick={() => setKey(v)}>Guardar</Btn>
+        </div>
+      </Field>
+      <p className="hint">Sin clave, Google Books a veces no responde por límite diario compartido. Puedes crear una gratis en Google Cloud (API «Books API»). Restríngela a <code>sadaybb.github.io</code> para que solo funcione desde FloppyOS.</p>
+    </div>
+  );
+}
+
 function General() {
   const [perm, setPerm] = useState(typeof Notification !== 'undefined' ? Notification.permission : 'denied');
   return (
@@ -213,6 +229,7 @@ function General() {
       <NumberSetting k="focusMin" def={25} label="Bloque de concentración" unit="min" />
       <NumberSetting k="breakMin" def={5} label="Descanso corto" unit="min" />
       <NumberSetting k="longBreakMin" def={15} label="Descanso largo (cada 4 bloques)" unit="min" />
+      <GoogleBooksKey />
       <div className="wide">
         Notificaciones del sistema: <b>{perm === 'granted' ? 'activadas' : perm === 'denied' ? 'bloqueadas' : 'sin decidir'}</b>{' '}
         {perm === 'default' && <Btn small onClick={async () => setPerm(await Notification.requestPermission())}>Activar</Btn>}

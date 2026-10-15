@@ -13,7 +13,7 @@ const CSP = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.anthropic.com https://openlibrary.org https://api.crossref.org",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.anthropic.com https://openlibrary.org https://api.crossref.org https://www.googleapis.com",
   "worker-src 'self' blob:",
   "manifest-src 'self'",
   "object-src 'none'",

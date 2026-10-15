@@ -185,7 +185,7 @@ export interface Reference extends Base {
   status: RefStatus;
   verify: RefVerify;
   /** Where the data came from, so every field can be traced (RF-18). */
-  source: { origin: 'manual' | 'temario' | 'openlibrary' | 'crossref' | 'ia'; detail?: string; checkedAt?: number };
+  source: { origin: 'manual' | 'temario' | 'openlibrary' | 'crossref' | 'googlebooks' | 'ia'; detail?: string; checkedAt?: number };
   links?: { label: string; url: string }[];
   notes?: string;
   raw?: string;
