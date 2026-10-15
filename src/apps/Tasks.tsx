@@ -65,6 +65,21 @@ export default function Tasks({ filter: initFilter, taskId }: { filter?: Filter;
   const [subject, setSubject] = useState<ID | undefined>();
   const [selId, setSelId] = useState<ID | undefined>(taskId);
   const [quick, setQuick] = useState('');
+  const [listW, setListWState] = useState(() => {
+    try {
+      return Math.max(240, Number(localStorage.getItem('floppyos.tasks.listW')) || 340);
+    } catch {
+      return 340;
+    }
+  });
+  const setListW = (w: number) => {
+    setListWState(w);
+    try {
+      localStorage.setItem('floppyos.tasks.listW', String(Math.round(w)));
+    } catch {
+      /* ignore */
+    }
+  };
 
   useEffect(() => { if (initFilter) setFilter(initFilter); }, [initFilter]);
   useEffect(() => { if (taskId) setSelId(taskId); }, [taskId]);
@@ -99,7 +114,7 @@ export default function Tasks({ filter: initFilter, taskId }: { filter?: Filter;
         <SubjectSelect subjects={subjects} value={subject} onChange={setSubject} none="Todas las materias" />
       </aside>
 
-      <div className="pane list-pane">
+      <div className="pane list-pane" style={sel ? { flex: `0 0 ${listW}px` } : undefined}>
         <form className="capture" onSubmit={(e) => { e.preventDefault(); void addQuick(); }}>
           <input className="input" value={quick} onChange={(e) => setQuick(e.target.value)} placeholder="Nueva tarea… (acepta @materia, fechas y duración)" aria-label="Nueva tarea" />
           <Btn type="submit">Agregar</Btn>
@@ -135,6 +150,7 @@ export default function Tasks({ filter: initFilter, taskId }: { filter?: Filter;
         </div>
       </div>
 
+      {sel && <Splitter width={listW} onChange={setListW} />}
       {sel && <TaskDetail key={sel.id} task={sel} tasks={tasks} onClose={() => setSelId(undefined)} />}
     </div>
   );
@@ -315,6 +331,32 @@ function TaskDetail({ task: t, tasks, onClose }: { task: Task; tasks: Task[]; on
         <p className="hint">Creada el {new Date(t.createdAt).toLocaleDateString()}</p>
       </div>
     </div>
+  );
+}
+
+/** Draggable divider between the task list and the detail (double-click resets). */
+function Splitter({ width, onChange }: { width: number; onChange: (w: number) => void }) {
+  const drag = useRef<{ x: number; w: number } | null>(null);
+  return (
+    <div
+      className="splitter"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Cambiar ancho de la lista"
+      title="Arrastra para cambiar el ancho · doble clic para restablecer"
+      onPointerDown={(e) => {
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        drag.current = { x: e.clientX, w: width };
+      }}
+      onPointerMove={(e) => {
+        if (!drag.current) return;
+        const pane = (e.currentTarget as HTMLElement).parentElement!;
+        const max = pane.clientWidth - 360 - 160; // keep room for the detail and the filters
+        onChange(Math.max(240, Math.min(max, drag.current.w + e.clientX - drag.current.x)));
+      }}
+      onPointerUp={() => (drag.current = null)}
+      onDoubleClick={() => onChange(340)}
+    />
   );
 }
 

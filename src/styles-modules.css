@@ -159,3 +159,15 @@
 .task-section-body { padding: 4px 10px 10px; display: flex; flex-direction: column; gap: 8px; }
 .list-pane + .detail:has(.task-sheet) { flex: 0 0 min(600px, 58%); }
 .task-essentials { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+
+/* Tareas: el detalle ocupa el centro; divisor arrastrable */
+.app.split.has-detail > .list-pane { min-width: 240px; }
+.app.split.has-detail > .detail:has(.task-sheet) { flex: 1; min-width: 360px; }
+.task-sheet > * { width: 100%; max-width: 920px; margin-left: auto; margin-right: auto; }
+.splitter { flex: 0 0 6px; cursor: col-resize; touch-action: none; background: var(--face); box-shadow: inset 1px 0 0 var(--hi), inset -1px 0 0 var(--sh); }
+.splitter:hover, .splitter:active { background: var(--face-2); }
+html.pixel-cursor .splitter { cursor: col-resize; }
+@media (max-width: 819px) {
+  .splitter { display: none; }
+  .app.split.has-detail > .list-pane { flex: 1 !important; }
+}
