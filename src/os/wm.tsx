@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
 import { APPS, type AppId } from '../apps/meta';
-import { animateMinimize, animateRestore } from './winAnim';
+import { animateMinimize, animateRestore, clearWindowAnim } from './winAnim';
 
 export interface Win {
   id: string;
@@ -83,7 +83,12 @@ export function WMProvider({ children }: { children: ReactNode }) {
         update(id, (cur) => (cur.z === z.current && !cur.minimized ? {} : { z: ++z.current, minimized: false }));
         if (w?.minimized) animateRestore(id);
       },
-      minimize: (id) => void animateMinimize(id).then(() => update(id, () => ({ minimized: true }))),
+      minimize: (id) =>
+        void animateMinimize(id).then(() => {
+          update(id, () => ({ minimized: true }));
+          // Clear the held last frame only after React has hidden the window.
+          setTimeout(() => clearWindowAnim(id), 80);
+        }),
       toggleMax: (id) => update(id, (w) => ({ maximized: !w.maximized })),
       move: (id, r) => update(id, () => r),
     };
