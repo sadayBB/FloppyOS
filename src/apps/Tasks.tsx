@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { create, newId, patch, remove, useRows, useSubjects, type ID, type Priority, type Recurrence, type Task, type TaskStatus } from '../db';
 import { addDays, fmtDur, relDay, today, toISO } from '../lib/dates';
 import { isOpen, PRIORITY, TASK_STATUS } from '../lib/labels';
 import { parseCapture } from '../lib/parse';
 import { Btn, Chip, Dot, Empty, Field, Input, LazyInput, Progress, Select, SubjectSelect } from '../os/ui';
 import { useWM } from '../os/wm';
-import { ReminderPicker } from '../os/ReminderPicker';
+import { REMINDER_OPTIONS, ReminderPicker } from '../os/ReminderPicker';
 import { AiBadge, AiButton, useAiAction, useAiEnabled } from '../os/Ai';
 import { CopyForClaude, parseListLines } from '../os/CopyForClaude';
 import { TASK_TEMPLATES } from '../lib/taskTemplates';
@@ -152,6 +152,12 @@ function TaskDetail({ task: t, tasks, onClose }: { task: Task; tasks: Task[]; on
   const dep = tasks.find((x) => x.id === t.dependsOn);
   const doneSteps = t.subtasks.filter((s) => s.done).length;
 
+  const subject = subjects.find((s) => s.id === t.subjectId);
+  const project = projects.find((p) => p.id === t.projectId);
+  const statusLabel = TASK_STATUS.find((s) => s.id === t.status)?.label;
+  const reminderText = !t.due ? 'sin fecha' : t.reminders === undefined ? 'predeterminados' : t.reminders.length ? t.reminders.map((m) => REMINDER_OPTIONS.find((o) => o.min === m)?.label ?? `${m} min`).join(', ') : 'ninguno';
+  const repeatText = t.recurrence ? `${t.recurrence.interval > 1 ? `cada ${t.recurrence.interval} ` : ''}${t.recurrence.freq === 'daily' ? (t.recurrence.interval > 1 ? 'días' : 'diario') : t.recurrence.freq === 'weekly' ? (t.recurrence.interval > 1 ? 'semanas' : 'semanal') : t.recurrence.interval > 1 ? 'meses' : 'mensual'}` : null;
+
   return (
     <div className="pane detail">
       <div className="detail-head">
@@ -164,61 +170,33 @@ function TaskDetail({ task: t, tasks, onClose }: { task: Task; tasks: Task[]; on
         }}>Duplicar</Btn>
         <Btn small onClick={() => { void remove('tasks', t.id); onClose(); }}>Eliminar</Btn>
       </div>
-      <div className="scroll form">
-        <Field label="Título" wide><LazyInput value={t.title} onCommit={(v) => set({ title: v })} /></Field>
-        <Field label="Materia"><SubjectSelect subjects={subjects} value={t.subjectId} onChange={(id) => set({ subjectId: id })} /></Field>
-        <Field label="Proyecto">
-          <Select value={t.projectId ?? ''} onChange={(e) => set({ projectId: e.target.value || undefined })}>
-            <option value="">Ninguno</option>
-            {projects.filter((p) => p.status === 'activo' || p.id === t.projectId).map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
-          </Select>
-        </Field>
-        <Field label="Estado">
-          <Select value={t.status} onChange={(e) => set({ status: e.target.value as TaskStatus, completedAt: e.target.value === 'completada' ? Date.now() : undefined })}>
-            {TASK_STATUS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-          </Select>
-        </Field>
-        <Field label="Fecha límite"><Input type="date" value={t.due ?? ''} onChange={(e) => set({ due: e.target.value || undefined })} /></Field>
-        <Field label="Hora"><Input type="time" value={t.dueTime ?? ''} onChange={(e) => set({ dueTime: e.target.value || undefined })} /></Field>
-        <Field label="Prioridad">
-          <Select value={t.priority} onChange={(e) => set({ priority: +e.target.value as Priority })}>
-            {([1, 2, 3, 4] as Priority[]).map((p) => <option key={p} value={p}>{PRIORITY[p].label}</option>)}
-          </Select>
-        </Field>
-        <Field label="Estimado (min)"><LazyInput type="number" min={0} value={String(t.estimateMin ?? '')} onCommit={(v) => set({ estimateMin: v ? +v : undefined })} /></Field>
-        <Field label="Tiempo real">
-          <span className="static">{t.spentMin ? fmtDur(t.spentMin) : '—'}{t.estimateMin && t.spentMin ? ` (${Math.round((t.spentMin / t.estimateMin) * 100)}% del estimado)` : ''}</span>
-        </Field>
-        <Field label="Depende de">
-          <Select value={t.dependsOn ?? ''} onChange={(e) => set({ dependsOn: e.target.value || undefined })}>
-            <option value="">Ninguna</option>
-            {tasks.filter((x) => x.id !== t.id && isOpen(x.status)).map((x) => <option key={x.id} value={x.id}>{x.title}</option>)}
-          </Select>
-        </Field>
-        {dep && isOpen(dep.status) && <div className="warn wide">⚠ Requiere terminar antes «{dep.title}».</div>}
-        <Field label="Repetir">
-          <Select value={t.recurrence?.freq ?? ''} onChange={(e) => set({ recurrence: e.target.value ? { freq: e.target.value as Recurrence['freq'], interval: t.recurrence?.interval ?? 1 } : undefined, nextSpawned: false })}>
-            <option value="">No se repite</option>
-            <option value="daily">Diario</option>
-            <option value="weekly">Semanal</option>
-            <option value="monthly">Mensual</option>
-          </Select>
-        </Field>
-        {t.recurrence && (
-          <Field label={`Cada cuántos ${t.recurrence.freq === 'daily' ? 'días' : t.recurrence.freq === 'weekly' ? 'semanas' : 'meses'}`}>
-            <Input type="number" min={1} value={t.recurrence.interval} onChange={(e) => set({ recurrence: { ...t.recurrence!, interval: Math.max(1, +e.target.value || 1) } })} />
-          </Field>
-        )}
-        <Field label="Recordatorios" wide>
-          <ReminderPicker value={t.reminders} onChange={(reminders) => set({ reminders })} disabled={!t.due} />
-        </Field>
-        <Field label="Etiquetas" wide>
-          <LazyInput value={t.tags.join(', ')} placeholder="examen, práctica…" onCommit={(v) => set({ tags: v.split(',').map((x) => x.trim().toLowerCase()).filter(Boolean) })} />
-        </Field>
-        <Field label="Descripción" wide><LazyInput multiline value={t.description ?? ''} onCommit={(v) => set({ description: v })} /></Field>
+      <div className="scroll task-sheet">
+        <div className="task-title-row">
+          <input type="checkbox" className="big-check" checked={t.status === 'completada'} onChange={() => void toggleDone(t)} aria-label="Completar tarea" />
+          <LazyInput className="input task-title-input" value={t.title} onCommit={(v) => set({ title: v || t.title })} aria-label="Título" />
+        </div>
 
-        <div className="wide">
-          <div className="section-title">Pasos {t.subtasks.length > 0 && `(${doneSteps}/${t.subtasks.length})`}</div>
+        <DescriptionBox value={t.description ?? ''} onSave={(description) => set({ description })} />
+
+        <div className="task-essentials">
+          <Field label="Materia"><SubjectSelect subjects={subjects} value={t.subjectId} onChange={(id) => set({ subjectId: id })} /></Field>
+          <Field label="Fecha límite">
+            <div className="date-time">
+              <Input type="date" value={t.due ?? ''} onChange={(e) => set({ due: e.target.value || undefined })} />
+              {t.due && <Input type="time" value={t.dueTime ?? ''} onChange={(e) => set({ dueTime: e.target.value || undefined })} aria-label="Hora" />}
+            </div>
+          </Field>
+          <Field label="Prioridad">
+            <div className="prio-pick" role="radiogroup" aria-label="Prioridad">
+              {([1, 2, 3, 4] as Priority[]).map((p) => (
+                <button key={p} role="radio" aria-checked={t.priority === p} className={t.priority === p ? 'on' : ''} style={{ ['--pc' as string]: PRIORITY[p].color }} onClick={() => set({ priority: p })}>{PRIORITY[p].label}</button>
+              ))}
+            </div>
+          </Field>
+        </div>
+        {dep && isOpen(dep.status) && <div className="warn">⚠ Requiere terminar antes «{dep.title}».</div>}
+
+        <Section id="steps" title={`Pasos${t.subtasks.length ? ` (${doneSteps}/${t.subtasks.length})` : ''}`} summary={t.subtasks.length ? null : 'divide la tarea en partes'} defaultOpen>
           {t.subtasks.length > 0 && <Progress value={doneSteps / t.subtasks.length} />}
           <ul className="subtasks">
             {t.subtasks.map((s) => (
@@ -230,13 +208,8 @@ function TaskDetail({ task: t, tasks, onClose }: { task: Task; tasks: Task[]; on
             ))}
           </ul>
           <form className="capture" onSubmit={(e) => { e.preventDefault(); if (step.trim()) { set({ subtasks: [...t.subtasks, { id: newId(), title: step.trim(), done: false }] }); setStep(''); } }}>
-            <input className="input" value={step} onChange={(e) => setStep(e.target.value)} placeholder="Agregar paso…" />
+            <input className="input" value={step} onChange={(e) => setStep(e.target.value)} placeholder="Agregar paso y pulsar Enter…" />
             <Btn small type="submit">+</Btn>
-            <AiButton busy={ai.busy} type="button" onClick={() => void ai.run(async () => {
-              const r = await suggestSubtasks(t.title, [t.description, t.subtasks.length ? `Pasos que ya tiene: ${t.subtasks.map((x) => x.title).join('; ')}` : ''].filter(Boolean).join('\n'), subjects.find((s) => s.id === t.subjectId)?.name);
-              setPicked(new Set(r.pasos.map((_, i) => i)));
-              return r;
-            })}>Sugerir pasos</AiButton>
           </form>
           <div className="toolbar">
             <Select value="" aria-label="Plantilla de pasos" onChange={(e) => {
@@ -245,14 +218,19 @@ function TaskDetail({ task: t, tasks, onClose }: { task: Task; tasks: Task[]; on
               setPicked(new Set(tpl.steps.map((_, i) => i)));
               ai.setResult({ pasos: tpl.steps, explicacion: `Pasos típicos de «${tpl.name}». Quita los que no apliquen.` });
             }}>
-              <option value="">Plantilla de pasos…</option>
+              <option value="">Usar plantilla…</option>
               {TASK_TEMPLATES.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
             </Select>
+            <AiButton busy={ai.busy} type="button" onClick={() => void ai.run(async () => {
+              const r = await suggestSubtasks(t.title, [t.description, t.subtasks.length ? `Pasos que ya tiene: ${t.subtasks.map((x) => x.title).join('; ')}` : ''].filter(Boolean).join('\n'), subject?.name);
+              setPicked(new Set(r.pasos.map((_, i) => i)));
+              return r;
+            })}>Sugerir pasos</AiButton>
             {!aiOn && (
               <CopyForClaude
                 label="Pasos con Claude"
                 title="Dividir la tarea con Claude"
-                buildPrompt={() => `Divide esta tarea universitaria en 3 a 8 pasos concretos, cortos y accionables, en orden. Responde solo con la lista, un paso por línea.\nTarea: ${t.title}${t.subjectId ? `\nMateria: ${subjects.find((x) => x.id === t.subjectId)?.name ?? ''}` : ''}${t.description ? `\nDescripción: ${t.description}` : ''}${t.subtasks.length ? `\nPasos que ya tiene (no los repitas): ${t.subtasks.map((x) => x.title).join('; ')}` : ''}`}
+                buildPrompt={() => `Divide esta tarea universitaria en 3 a 8 pasos concretos, cortos y accionables, en orden. Responde solo con la lista, un paso por línea.\nTarea: ${t.title}${subject ? `\nMateria: ${subject.name}` : ''}${t.description ? `\nDescripción: ${t.description}` : ''}${t.subtasks.length ? `\nPasos que ya tiene (no los repitas): ${t.subtasks.map((x) => x.title).join('; ')}` : ''}`}
                 applyLabel="Revisar pasos"
                 pasteHint="Pega la lista de pasos que te dio Claude."
                 onApply={(answer) => {
@@ -280,9 +258,119 @@ function TaskDetail({ task: t, tasks, onClose }: { task: Task; tasks: Task[]; on
               </div>
             </div>
           )}
-        </div>
-        {t.subjectId && <div className="wide"><Dot color={subjects.find((s) => s.id === t.subjectId)?.color ?? '#999'} /> Creada {new Date(t.createdAt).toLocaleDateString()}</div>}
+        </Section>
+
+        <Section id="reminders" title="Avisos y repetición" summary={[`avisos: ${reminderText}`, repeatText && `se repite ${repeatText}`].filter(Boolean).join(' · ')}>
+          <Field label="Recordatorios" wide><ReminderPicker value={t.reminders} onChange={(reminders) => set({ reminders })} disabled={!t.due} /></Field>
+          <div className="form">
+            <Field label="Repetir">
+              <Select value={t.recurrence?.freq ?? ''} onChange={(e) => set({ recurrence: e.target.value ? { freq: e.target.value as Recurrence['freq'], interval: t.recurrence?.interval ?? 1 } : undefined, nextSpawned: false })}>
+                <option value="">No se repite</option>
+                <option value="daily">Diario</option>
+                <option value="weekly">Semanal</option>
+                <option value="monthly">Mensual</option>
+              </Select>
+            </Field>
+            {t.recurrence && (
+              <Field label={`Cada cuántos ${t.recurrence.freq === 'daily' ? 'días' : t.recurrence.freq === 'weekly' ? 'semanas' : 'meses'}`}>
+                <Input type="number" min={1} value={t.recurrence.interval} onChange={(e) => set({ recurrence: { ...t.recurrence!, interval: Math.max(1, +e.target.value || 1) } })} />
+              </Field>
+            )}
+          </div>
+        </Section>
+
+        <Section id="time" title="Tiempo" summary={[t.estimateMin ? `estimado ${fmtDur(t.estimateMin)}` : 'sin estimado', t.spentMin ? `llevas ${fmtDur(t.spentMin)}` : null].filter(Boolean).join(' · ')}>
+          <div className="form">
+            <Field label="Estimado (min)"><LazyInput type="number" min={0} value={String(t.estimateMin ?? '')} onCommit={(v) => set({ estimateMin: v ? +v : undefined })} /></Field>
+            <Field label="Tiempo real">
+              <span className="static">{t.spentMin ? fmtDur(t.spentMin) : '—'}{t.estimateMin && t.spentMin ? ` (${Math.round((t.spentMin / t.estimateMin) * 100)}% del estimado)` : ''}</span>
+            </Field>
+          </div>
+        </Section>
+
+        <Section id="org" title="Organización" summary={[t.status !== 'pendiente' && statusLabel, project && `proyecto: ${project.title}`, dep && `depende de: ${dep.title}`, t.tags.length > 0 && t.tags.map((x) => `#${x}`).join(' ')].filter(Boolean).join(' · ') || 'estado, proyecto, dependencias, etiquetas'}>
+          <div className="form">
+            <Field label="Estado">
+              <Select value={t.status} onChange={(e) => set({ status: e.target.value as TaskStatus, completedAt: e.target.value === 'completada' ? Date.now() : undefined })}>
+                {TASK_STATUS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+              </Select>
+            </Field>
+            <Field label="Proyecto">
+              <Select value={t.projectId ?? ''} onChange={(e) => set({ projectId: e.target.value || undefined })}>
+                <option value="">Ninguno</option>
+                {projects.filter((p) => p.status === 'activo' || p.id === t.projectId).map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
+              </Select>
+            </Field>
+            <Field label="Depende de">
+              <Select value={t.dependsOn ?? ''} onChange={(e) => set({ dependsOn: e.target.value || undefined })}>
+                <option value="">Ninguna</option>
+                {tasks.filter((x) => x.id !== t.id && isOpen(x.status)).map((x) => <option key={x.id} value={x.id}>{x.title}</option>)}
+              </Select>
+            </Field>
+            <Field label="Etiquetas">
+              <LazyInput value={t.tags.join(', ')} placeholder="examen, práctica…" onCommit={(v) => set({ tags: v.split(',').map((x) => x.trim().toLowerCase()).filter(Boolean) })} />
+            </Field>
+          </div>
+        </Section>
+        <p className="hint">Creada el {new Date(t.createdAt).toLocaleDateString()}</p>
       </div>
     </div>
+  );
+}
+
+/** Collapsible group of optional fields; closed it shows what is already set. Remembers its state. */
+function Section({ id, title, summary, defaultOpen, children }: { id: string; title: string; summary?: string | null; defaultOpen?: boolean; children: ReactNode }) {
+  const key = `floppyos.taskSection.${id}`;
+  const [open, setOpen] = useState(() => {
+    try {
+      const v = localStorage.getItem(key);
+      return v === null ? !!defaultOpen : v === '1';
+    } catch {
+      return !!defaultOpen;
+    }
+  });
+  const toggle = () => {
+    setOpen(!open);
+    try {
+      localStorage.setItem(key, open ? '0' : '1');
+    } catch {
+      /* ignore */
+    }
+  };
+  return (
+    <section className={`task-section ${open ? 'open' : ''}`}>
+      <button className="task-section-head" aria-expanded={open} onClick={toggle}>
+        <span className="caret">{open ? '▾' : '▸'}</span>
+        <b>{title}</b>
+        {!open && summary && <span className="hint ellipsis">{summary}</span>}
+      </button>
+      {open && <div className="task-section-body">{children}</div>}
+    </section>
+  );
+}
+
+/** Big description area, saved while typing (debounced) and on blur. */
+function DescriptionBox({ value, onSave }: { value: string; onSave: (v: string) => void }) {
+  const [v, setV] = useState(value);
+  const timer = useRef<number>();
+  useEffect(() => setV(value), [value]);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  return (
+    <textarea
+      className="input task-description"
+      value={v}
+      aria-label="Descripción"
+      placeholder="¿Qué hay que hacer? Instrucciones del profe, enlaces, criterios de entrega…"
+      onChange={(e) => {
+        setV(e.target.value);
+        clearTimeout(timer.current);
+        const next = e.target.value;
+        timer.current = window.setTimeout(() => onSave(next), 700);
+      }}
+      onBlur={() => {
+        clearTimeout(timer.current);
+        if (v !== value) onSave(v);
+      }}
+    />
   );
 }

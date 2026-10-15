@@ -307,6 +307,8 @@ export async function verifyReference(ref: Partial<Reference>): Promise<Candidat
       /* try the next source */
     }
   }
+  // Only confirmed matches are useful (their data can be applied); anything weaker is reported as «no match».
+  if (best && best.verdict !== 'confirmada') return null;
   return best;
 }
 
@@ -326,7 +328,7 @@ export function referenceLinks(r: Partial<Reference>) {
 
 export const VERIFY_LABEL: Record<RefVerify, { label: string; color: string }> = {
   confirmada: { label: '✓ Confirmada', color: '#2e9d5b' },
-  probable: { label: '≈ Coincidencia probable', color: '#d9a24e' },
+  probable: { label: '· Sin coincidencia en línea', color: '#a7a1b8' },
   // Neutral on purpose: many valid books (local editions, old printings) simply aren't in online catalogues.
   no_encontrada: { label: '· Sin coincidencia en línea', color: '#a7a1b8' },
   no_verificada: { label: '· Sin verificar', color: '#a7a1b8' },

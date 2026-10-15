@@ -111,8 +111,7 @@
 
 .verify-tag { font-size: 12px; padding: 0 6px; border: 1px solid transparent; white-space: nowrap; }
 .verify-tag.confirmada { color: #1f7a45; border-color: #2e9d5b; background: rgba(46, 157, 91, 0.12); }
-.verify-tag.probable { color: #8a5a10; border-color: #d9a24e; background: rgba(217, 162, 78, 0.14); }
-.verify-tag.no_encontrada, .verify-tag.no_verificada { color: var(--ink-soft); }
+.verify-tag.no_encontrada, .verify-tag.no_verificada, .verify-tag.probable { color: var(--ink-soft); }
 
 /* ¿Qué hago ahora? y Mi PC */
 .nextup-cta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -132,3 +131,31 @@
 .plan-preview { max-height: 200px; overflow: auto; font-size: 13px; }
 .trash-table td { vertical-align: middle; } .trash-table td.ellipsis { max-width: 260px; }
 .props-body { max-height: 60vh; overflow: auto; }
+
+/* Detalle de tarea: lo esencial arriba, lo demás plegable */
+.task-sheet { display: flex; flex-direction: column; gap: 10px; padding-right: 4px; }
+.task-title-row { display: flex; align-items: center; gap: 8px; }
+.big-check { width: 22px !important; height: 22px !important; }
+.input.task-title-input { font-size: 18px; font-weight: 600; min-height: 36px; }
+.input.task-description {
+  min-height: 150px;
+  resize: vertical;
+  font-size: 15px;
+  line-height: 24px;
+  padding: 0 10px;
+  background: linear-gradient(transparent 23px, var(--note-line) 23px) 0 0 / 100% 24px local, var(--field);
+}
+.task-essentials { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; align-items: end; }
+.date-time { display: flex; gap: 4px; }
+.date-time .input[type='time'] { width: 110px; flex-shrink: 0; }
+.prio-pick { display: flex; }
+.prio-pick button { flex: 1; min-height: 28px; border: 0; background: var(--face); box-shadow: var(--out); font-size: 13px; padding: 0 4px; }
+.prio-pick button.on { box-shadow: var(--in); background: color-mix(in srgb, var(--pc) 22%, var(--field)); color: var(--ink); font-weight: 600; }
+.task-section { box-shadow: var(--in); background: var(--paper); }
+.task-section-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 10px; border: 0; background: none; text-align: left; min-width: 0; }
+.task-section-head:hover { background: var(--hover); }
+.task-section-head .caret { width: 12px; color: var(--accent); }
+.task-section-head .hint { flex: 1; min-width: 0; }
+.task-section-body { padding: 4px 10px 10px; display: flex; flex-direction: column; gap: 8px; }
+.list-pane + .detail:has(.task-sheet) { flex: 0 0 min(600px, 58%); }
+.task-essentials { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
